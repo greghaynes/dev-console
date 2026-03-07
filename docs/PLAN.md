@@ -46,7 +46,7 @@ starts and listens.
 - Operator-configured allowlist of GitHub login names; returns 403 for users not
   on the list
 
-**Acceptance:** Hitting `GET /auth/login` redirects to GitHub; after authorisation
+**Acceptance:** Hitting `GET /auth/login` redirects to GitHub; after authorization
 the user lands back on the server with a valid session cookie. A user not on the
 allowlist sees a 403. A `/api/whoami` endpoint returns `{ login, id }` for the
 authenticated user.
