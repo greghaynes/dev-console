@@ -97,11 +97,11 @@ file or logged.
 
 ## Development
 
-```sh
-make dev    # start server with hot-reload and Vite dev server
-make test   # run Go tests + frontend tests
-make build  # produce a single self-contained binary
-```
+The Makefile-based workflow (`make dev`, `make test`, `make build`) described
+in the design and planning documents is not yet implemented in this
+repository. Until a `Makefile` is added, please refer to the project-specific
+setup and run instructions (and [docs/PLAN.md](docs/PLAN.md)) for the current
+development, testing, and build process.
 
 ## Roadmap
 
