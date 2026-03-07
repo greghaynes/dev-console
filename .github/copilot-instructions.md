@@ -294,6 +294,35 @@ end-to-end feature before adding breadth.
 
 ---
 
+## Pre-commit Checks
+
+Before committing any changes, run all of the following checks — they are the
+same checks the CI pipeline enforces:
+
+```bash
+# Verify module dependencies are consistent
+go mod verify
+
+# Run the Go static analyser
+go vet ./...
+
+# Build the server binary
+make build
+
+# Check Go code formatting (must produce no output)
+gofmt -l .
+
+# Lint Markdown files in docs/
+npx --yes markdownlint-cli2 "docs/**/*.md"
+
+# Run tests with the race detector
+make test-race
+```
+
+A commit that fails any of these will fail CI. Fix all failures before pushing.
+
+---
+
 ## What Not to Do
 
 - Do not add new dependencies without updating `go.mod` / `go.sum` via

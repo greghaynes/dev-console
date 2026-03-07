@@ -76,6 +76,7 @@ additional build step is required. This site is intentionally replaced by the
 React SPA in step 1.6.
 
 **Acceptance:** After completing step 1.2 configuration, an operator can:
+
 1. Open the server URL in a browser; when unauthenticated, be redirected to
    `/login` and see a page with a "Sign in with GitHub" link.
 2. Click the "Sign in with GitHub" link and be redirected to the GitHub OAuth
