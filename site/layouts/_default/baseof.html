@@ -21,10 +21,10 @@
 </head>
 <body>
   <nav>
-    <a href="/">Home</a>
-    <a href="/docs/design/">Design</a>
-    <a href="/docs/plan/">Plan</a>
-    <a href="/docs/wireframes/">Wireframes</a>
+    <a href="{{ "/" | relURL }}">Home</a>
+    <a href="{{ "/docs/design/" | relURL }}">Design</a>
+    <a href="{{ "/docs/plan/" | relURL }}">Plan</a>
+    <a href="{{ "/docs/wireframes/" | relURL }}">Wireframes</a>
   </nav>
   <main>
     {{- block "main" . }}{{- end }}
