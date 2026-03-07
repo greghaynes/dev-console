@@ -1,5 +1,6 @@
 # Build output
 bin/
+public/
 
 # Local config (may contain secrets)
 dev-console.yaml

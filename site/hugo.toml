@@ -1,0 +1,17 @@
+baseURL = "/"
+title = "Dev Console"
+languageCode = "en-us"
+
+[module]
+  [[module.mounts]]
+    source = "../docs"
+    target = "content/docs"
+  [[module.mounts]]
+    source = "content"
+    target = "content"
+  [[module.mounts]]
+    source = "layouts"
+    target = "layouts"
+  [[module.mounts]]
+    source = "static"
+    target = "static"
