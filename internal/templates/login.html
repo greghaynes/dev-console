@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in — Dev Console</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #252526;
+      border: 1px solid #3c3c3c;
+      border-radius: 6px;
+      padding: 2rem;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 1.25rem;
+      margin: 0 0 1.5rem 0;
+      color: #9cdcfe;
+    }
+    a.signin-btn {
+      display: inline-block;
+      background: #238636;
+      color: #ffffff;
+      text-decoration: none;
+      padding: 0.5rem 1.25rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    a.signin-btn:hover {
+      background: #2ea043;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Dev Console</h1>
+    <a class="signin-btn" href="/auth/login">Sign in with GitHub</a>
+  </div>
+</body>
+</html>

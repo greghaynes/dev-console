@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dev Console</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #252526;
+      border: 1px solid #3c3c3c;
+      border-radius: 6px;
+      padding: 2rem;
+      max-width: 400px;
+      width: 100%;
+    }
+    h1 {
+      font-size: 1.25rem;
+      margin: 0 0 1rem 0;
+      color: #9cdcfe;
+    }
+    .field {
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .label {
+      color: #808080;
+    }
+    .value {
+      color: #ce9178;
+    }
+    .status {
+      color: #4ec9b0;
+      margin-bottom: 1.5rem;
+      font-size: 0.85rem;
+    }
+    form {
+      margin-top: 1.5rem;
+    }
+    button {
+      background: #0e639c;
+      color: #ffffff;
+      border: none;
+      padding: 0.5rem 1.25rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: monospace;
+      font-size: 0.9rem;
+    }
+    button:hover {
+      background: #1177bb;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Dev Console</h1>
+    <p class="status">&#10003; Session is valid</p>
+    <div class="field">
+      <span class="label">Login: </span><span class="value">{{.Login}}</span>
+    </div>
+    <div class="field">
+      <span class="label">ID: </span><span class="value">{{.ID}}</span>
+    </div>
+    <form method="POST" action="/auth/logout">
+      <button type="submit">Sign out</button>
+    </form>
+  </div>
+</body>
+</html>
