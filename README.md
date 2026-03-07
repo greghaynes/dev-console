@@ -104,6 +104,67 @@ repository. Until a `Makefile` is added, please refer to the project-specific
 setup and run instructions (and [docs/PLAN.md](docs/PLAN.md)) for the current
 development, testing, and build process.
 
+## Documentation
+
+- [Design Document](docs/DESIGN.md)
+- [Implementation Plan](docs/PLAN.md)
+- [Wireframes](docs/WIREFRAMES.md)
+
+## Docs Site
+
+The `site/` directory contains a [Hugo](https://gohugo.io/) static site built
+from the docs above, deployable to either
+[Cloudflare Pages](https://pages.cloudflare.com/) or
+[Cloudflare Workers](https://workers.cloudflare.com/).
+
+```sh
+make site-serve   # serve locally with live reload
+make site-build   # build static output to site/public/
+```
+
+### Cloudflare Pages
+
+Connect the repository to Cloudflare Pages via the dashboard and set these
+build settings (root directory: `site`):
+
+| Setting | Value |
+|---------|-------|
+| Build command | `hugo --minify` |
+| Build output directory | `public` |
+| `HUGO_VERSION` | `0.146.0` |
+
+### Cloudflare Workers
+
+The root `wrangler.toml` configures the site for deployment as a
+[Cloudflare Worker with Static Assets](https://developers.cloudflare.com/workers/static-assets/).
+This approach gives you full Workers programmability on top of the static site
+if needed in the future.
+
+**Prerequisites:**
+
+```sh
+npm install -g wrangler   # install the Wrangler CLI
+wrangler login            # authenticate with your Cloudflare account
+```
+
+**Deploy:**
+
+```sh
+wrangler deploy           # builds the site and publishes the Worker
+```
+
+Wrangler runs `make site-build` (configured in `wrangler.toml`) before
+uploading, so no separate build step is needed. On first deploy, Wrangler
+creates the Worker in your Cloudflare account using the `name` defined in
+`wrangler.toml` (`dev-console-site`). Subsequent `wrangler deploy` calls
+update the existing deployment.
+
+To preview the Worker locally before deploying:
+
+```sh
+wrangler dev
+```
+
 ## Roadmap
 
 See [docs/PLAN.md](docs/PLAN.md) for the full phased implementation plan and

@@ -1,4 +1,4 @@
-.PHONY: build test test-race dev clean lint vet site-build
+.PHONY: build test test-race dev clean lint vet site-build site-serve
 
 # Build the server binary.
 build:
@@ -33,3 +33,8 @@ lint:
 # Outputs to public/ at the repository root.
 site-build:
 	cd site && hugo --minify --destination ../public
+
+# Serve the documentation site locally with live reload.
+site-serve:
+	cd site && hugo server
+
