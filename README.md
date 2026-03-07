@@ -113,20 +113,58 @@ development, testing, and build process.
 ## Docs Site
 
 The `site/` directory contains a [Hugo](https://gohugo.io/) static site built
-from the docs above, deployable to [Cloudflare Pages](https://pages.cloudflare.com/).
+from the docs above, deployable to either
+[Cloudflare Pages](https://pages.cloudflare.com/) or
+[Cloudflare Workers](https://workers.cloudflare.com/).
 
 ```sh
 make site-serve   # serve locally with live reload
 make site-build   # build static output to site/public/
 ```
 
-**Cloudflare Pages settings** (root directory: `site`):
+### Cloudflare Pages
+
+Connect the repository to Cloudflare Pages via the dashboard and set these
+build settings (root directory: `site`):
 
 | Setting | Value |
 |---------|-------|
 | Build command | `hugo --minify` |
 | Build output directory | `public` |
 | `HUGO_VERSION` | `0.146.0` |
+
+### Cloudflare Workers
+
+The `site/wrangler.toml` file configures the site for deployment as a
+[Cloudflare Worker with Static Assets](https://developers.cloudflare.com/workers/static-assets/).
+This approach gives you full Workers programmability on top of the static site
+if needed in the future.
+
+**Prerequisites:**
+
+```sh
+npm install -g wrangler   # install the Wrangler CLI
+wrangler login            # authenticate with your Cloudflare account
+```
+
+**Deploy:**
+
+```sh
+make site-build           # build the Hugo site into site/public/
+cd site
+wrangler deploy           # upload static assets and publish the Worker
+```
+
+On first deploy, Wrangler creates the Worker in your Cloudflare account using
+the `name` defined in `wrangler.toml` (`dev-console-site`). Subsequent
+`wrangler deploy` calls update the existing deployment.
+
+To preview the Worker locally before deploying:
+
+```sh
+cd site
+wrangler dev
+```
 
 ## Roadmap
 
