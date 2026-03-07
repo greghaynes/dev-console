@@ -1,0 +1,59 @@
+# dev-console.yaml.example
+#
+# Annotated sample configuration for the Dev Console server.
+# Copy this file to dev-console.yaml and adjust the values for your environment.
+#
+# Secrets should be provided through environment variables using the
+# ${ENV_VAR} substitution syntax so they are never stored in plain text.
+
+server:
+  # TCP address the HTTP server listens on.
+  listenAddr: ":8080"
+
+  # Optional TLS termination. Remove this section to run plain HTTP
+  # (e.g. when TLS is terminated by a reverse proxy such as nginx or Caddy).
+  tls:
+    certFile: "/etc/dev-console/tls.crt"
+    keyFile:  "/etc/dev-console/tls.key"
+
+auth:
+  github:
+    # Create an OAuth App at https://github.com/settings/developers.
+    clientId:     "Ov23liABCDEFGH"
+    clientSecret: "${GITHUB_CLIENT_SECRET}"   # never commit this in plain text
+    # The callback URL must match the "Authorization callback URL" set in your
+    # GitHub OAuth App settings.
+    callbackUrl:  "https://console.example.com/callback"
+
+  # Only these GitHub usernames are permitted to log in.
+  allowedGithubUsers:
+    - "alice"
+    - "bob"
+
+  # Secret used to sign JWT session cookies.  Must be at least 32 random bytes.
+  sessionSecret: "${SESSION_SECRET}"
+
+  # How long a session remains valid after the last login.  Defaults to 24h.
+  sessionTtl: "24h"
+
+llm:
+  # LLM provider: "openai", "anthropic" (OpenAI-compatible endpoint), or "ollama".
+  provider:    "openai"
+  apiKey:      "${OPENAI_API_KEY}"
+  model:       "gpt-4o"
+
+  # Shell commands the agent is allowed to execute via the run_command tool.
+  allowedCommands:
+    - "go"
+    - "npm"
+    - "make"
+    - "git"
+
+workspaces:
+  - id:       "my-project"
+    name:     "My Project"
+    rootPath: "/srv/workspaces/my-project"
+  # Add more workspaces as needed:
+  # - id:       "another-project"
+  #   name:     "Another Project"
+  #   rootPath: "/srv/workspaces/another-project"
