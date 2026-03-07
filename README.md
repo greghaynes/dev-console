@@ -48,3 +48,21 @@ make vet        # run go vet
 - [Design Document](docs/DESIGN.md)
 - [Implementation Plan](docs/PLAN.md)
 - [Wireframes](docs/WIREFRAMES.md)
+
+## Docs Site
+
+The `site/` directory contains a [Hugo](https://gohugo.io/) static site built
+from the docs above, deployable to [Cloudflare Pages](https://pages.cloudflare.com/).
+
+```sh
+make site-serve   # serve locally with live reload
+make site-build   # build static output to site/public/
+```
+
+**Cloudflare Pages settings** (root directory: `site`):
+
+| Setting | Value |
+|---------|-------|
+| Build command | `hugo --minify` |
+| Build output directory | `public` |
+| `HUGO_VERSION` | `0.146.0` |
