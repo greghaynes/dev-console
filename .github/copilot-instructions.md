@@ -205,6 +205,80 @@ the package's purpose in one or two sentences.
 
 ---
 
+## Specification and Planning Workflow
+
+### Writing a specification (`docs/DESIGN.md`)
+
+`docs/DESIGN.md` is the single source of truth for *what* the product must do
+and *why*. When adding or changing a feature area, update this document first.
+A well-formed design document contains, at minimum:
+
+1. **Overview** — one paragraph describing the problem and the solution.
+2. **Goals** — a numbered table of concrete, testable outcomes (`G1`, `G2`, …).
+3. **Non-Goals** — an explicit list of things that are *out of scope*; this is
+   as important as the goals.
+4. **Architecture Overview** — ASCII diagram(s) showing major components and
+   the data/control flow between them.
+5. **Data Models** — key structs, enums, or JSON shapes; enough detail to
+   derive an API contract.
+6. **API Design** — REST endpoint table and/or WebSocket message envelope
+   schemas; include HTTP methods, paths, request/response shapes, and error
+   codes.
+7. **Security Model** — authentication, authorization, and any threat-model
+   notes (e.g. path-traversal mitigations, secret handling).
+8. **Open Questions** — decisions not yet made; remove entries as they are
+   resolved.
+
+Keep `DESIGN.md` evergreen: update it whenever a decision changes, and add a
+note in the commit message cross-referencing the section that changed.
+
+### Creating a phased implementation plan (`docs/PLAN.md`)
+
+`docs/PLAN.md` translates the specification into an ordered sequence of
+incremental milestones. Each milestone (phase) must be a **thin vertical
+slice** — a working, deployable increment that a real user can interact with,
+even if the feature set is narrow. Horizontal layers (e.g. "add all backend
+endpoints first, then all UI") are explicitly discouraged.
+
+Structure of `PLAN.md`:
+
+- **Phase heading** (`## Phase N — Short Title`) with a one-sentence *Goal*.
+- **Numbered sub-tasks** (`### N.M Short Name`) each containing:
+  - A bullet list of concrete deliverables (files, packages, endpoints).
+  - An **Acceptance** paragraph describing the manual verification steps that
+    prove the sub-task is done.
+- **Phase Deliverables** table listing every artifact produced by the phase.
+- A **Dependency Map** at the end showing which phases depend on which.
+- A **Work Sizing Guidance** table with rough effort estimates and primary
+  risks per phase.
+- A **Definition of Done** checklist that applies to every phase.
+
+When writing acceptance criteria, describe the exact observable behaviour (e.g.
+"`curl /api/workspaces` returns a JSON array") rather than implementation
+details.
+
+### Tracking and updating phase status
+
+As sub-tasks are completed, mark them with a `✅` suffix in the sub-task
+heading in `PLAN.md`:
+
+```markdown
+### 1.1 Server Scaffolding ✅
+```
+
+When an entire phase is complete:
+
+1. Verify every sub-task heading in that phase carries `✅`.
+2. Add an entry to `CHANGELOG.md` summarising what shipped (one paragraph or
+   bullet list per phase is sufficient).
+3. The `## Phase N` heading itself does **not** get a `✅`; the per-sub-task
+   markers make the status self-evident at a glance.
+
+Do not retroactively alter the acceptance criteria of a completed sub-task;
+if requirements change, add a new sub-task or a new phase.
+
+---
+
 ## Implementation Phasing
 
 Follow the order in `docs/PLAN.md`. Each phase must:
@@ -217,6 +291,35 @@ Follow the order in `docs/PLAN.md`. Each phase must:
 Do not start a later phase until all acceptance criteria for the current phase
 are met. The guiding principle is **thin vertical slices**: ship a working,
 end-to-end feature before adding breadth.
+
+---
+
+## Pre-commit Checks
+
+Before committing any changes, run all of the following checks — they are the
+same checks the CI pipeline enforces:
+
+```bash
+# Verify module dependencies are consistent
+go mod verify
+
+# Run the Go static analyser
+go vet ./...
+
+# Build the server binary
+make build
+
+# Check Go code formatting (must produce no output)
+gofmt -l .
+
+# Lint Markdown files in docs/
+npx --yes markdownlint-cli2 "docs/**/*.md"
+
+# Run tests with the race detector
+make test-race
+```
+
+A commit that fails any of these will fail CI. Fix all failures before pushing.
 
 ---
 

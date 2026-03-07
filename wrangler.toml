@@ -1,0 +1,19 @@
+# Cloudflare Workers configuration for the Dev Console documentation site.
+#
+# Prerequisites:
+#   npm install -g wrangler          # install the Wrangler CLI
+#   wrangler login                   # authenticate with your Cloudflare account
+#
+# Deploy:
+#   wrangler deploy                  # builds the site and uploads static assets
+
+name = "dev-console"
+compatibility_date = "2024-09-25"
+
+# Build the Hugo site before deploying.
+[build]
+command = "make site-build"
+
+# Serve the Hugo-generated static files as Workers Static Assets.
+[assets]
+directory = "site/public"

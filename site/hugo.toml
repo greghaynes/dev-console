@@ -1,0 +1,48 @@
+baseURL = "/"
+languageCode = "en-us"
+title = "Dev Console"
+
+# Theme via Hugo modules
+theme = "github.com/alex-shpak/hugo-book"
+
+# Cloudflare Pages uses the public/ directory by default; Hugo outputs there.
+publishDir = "public"
+
+[params]
+  # (Optional) Set source repository location.
+  # Used for 'Edit this page' links.
+  BookRepo = "https://github.com/greghaynes/dev-console"
+
+  # (Optional) Specify the path to docs inside the repository.
+  BookSection = "docs"
+
+  # Set to true to show table of contents on all pages.
+  BookToC = true
+
+  # Set to true to enable search.
+  BookSearch = true
+
+  # Set to true to show last modified date in footer.
+  BookDateFormat = "Jan 2, 2006"
+
+[menu]
+  [[menu.before]]
+    name = "GitHub"
+    url = "https://github.com/greghaynes/dev-console"
+    weight = 10
+
+[module]
+  [[module.mounts]]
+    source = "content"
+    target = "content"
+  [[module.mounts]]
+    source = "static"
+    target = "static"
+  [[module.mounts]]
+    source = "archetypes"
+    target = "archetypes"
+  [[module.mounts]]
+    source = "../docs"
+    target = "content/docs"
+  [[module.imports]]
+    path = "github.com/alex-shpak/hugo-book"
