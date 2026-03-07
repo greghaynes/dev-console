@@ -135,7 +135,7 @@ build settings (root directory: `site`):
 
 ### Cloudflare Workers
 
-The `site/wrangler.toml` file configures the site for deployment as a
+The root `wrangler.toml` configures the site for deployment as a
 [Cloudflare Worker with Static Assets](https://developers.cloudflare.com/workers/static-assets/).
 This approach gives you full Workers programmability on top of the static site
 if needed in the future.
@@ -150,19 +150,18 @@ wrangler login            # authenticate with your Cloudflare account
 **Deploy:**
 
 ```sh
-make site-build           # build the Hugo site into site/public/
-cd site
-wrangler deploy           # upload static assets and publish the Worker
+wrangler deploy           # builds the site and publishes the Worker
 ```
 
-On first deploy, Wrangler creates the Worker in your Cloudflare account using
-the `name` defined in `wrangler.toml` (`dev-console-site`). Subsequent
-`wrangler deploy` calls update the existing deployment.
+Wrangler runs `make site-build` (configured in `wrangler.toml`) before
+uploading, so no separate build step is needed. On first deploy, Wrangler
+creates the Worker in your Cloudflare account using the `name` defined in
+`wrangler.toml` (`dev-console-site`). Subsequent `wrangler deploy` calls
+update the existing deployment.
 
 To preview the Worker locally before deploying:
 
 ```sh
-cd site
 wrangler dev
 ```
 

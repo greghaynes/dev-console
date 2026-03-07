@@ -4,13 +4,16 @@
 #   npm install -g wrangler          # install the Wrangler CLI
 #   wrangler login                   # authenticate with your Cloudflare account
 #
-# Build and deploy:
-#   hugo --minify                    # build the static site into ./public
-#   wrangler deploy                  # upload assets and deploy the Worker
+# Deploy:
+#   wrangler deploy                  # builds the site and uploads static assets
 
 name = "dev-console-site"
 compatibility_date = "2024-09-25"
 
+# Build the Hugo site before deploying.
+[build]
+command = "make site-build"
+
 # Serve the Hugo-generated static files as Workers Static Assets.
 [assets]
-directory = "./public"
+directory = "site/public"
