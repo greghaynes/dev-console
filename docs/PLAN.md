@@ -145,6 +145,50 @@ No design polish is required at this stage.
 375 px wide mobile viewport: login → workspace list → open terminal → interactive
 shell session.
 
+### 1.7 Demo Mode & PR Preview Deployment
+
+A demo mode allows the frontend SPA to run entirely in the browser without a
+running backend. This is used for visual review of UI changes on pull requests
+before any server infrastructure is available.
+
+**Demo mode implementation:**
+
+- A `VITE_DEMO_MODE` Vite environment variable gates all backend calls.
+- All API calls and WebSocket connections are handled by a parallel set of mock
+  service modules (e.g. `src/services/api.ts` backed by either a real fetch or a
+  demo stub, selected at build time via `import.meta.env.VITE_DEMO_MODE`).
+- Mock data is static and deterministic so the demo is fully reproducible.
+- Demo stub contracts:
+  - `GET /api/workspaces` → two hard-coded workspaces (`demo-web`, `demo-api`)
+  - `GET /api/workspaces/:id` → metadata for the matching workspace
+  - Terminal WebSocket → a local pseudo-PTY simulation that echoes input and
+    prints a welcome banner; no system processes are spawned
+  - All auth endpoints → no-op; the user is treated as pre-authenticated with
+    login `demo` and ID `0`
+- The `LoginPage` in demo mode shows a "Try Demo" button instead of the GitHub
+  OAuth link; clicking it immediately navigates to `WorkspaceListPage`.
+- A persistent banner across all pages reads **"Demo mode — no data is saved"**.
+
+**Per-PR Cloudflare Pages deployment:**
+
+- A GitHub Actions workflow (`.github/workflows/demo-preview.yml`) runs on every
+  pull request that touches `client/`.
+- It builds the SPA with `VITE_DEMO_MODE=true` and deploys the `client/dist`
+  directory to a Cloudflare Pages project (`dev-console-demo`).
+- Cloudflare Pages posts a preview URL as a PR comment/deployment status so
+  reviewers can click through the UI without standing up a server.
+- Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+
+**Acceptance:**
+
+1. `VITE_DEMO_MODE=true npm run build` produces a static bundle with no server
+   dependency.
+2. Opening `index.html` in a browser (or serving with `npm run preview`) shows
+   the demo banner and allows navigating login → workspace list → terminal
+   without any backend.
+3. A PR that modifies `client/` triggers the `demo-preview` workflow and a
+   Cloudflare Pages preview URL appears in the PR.
+
 ### Phase 1 Deliverables
 
 | Artifact | Description |
@@ -156,9 +200,11 @@ shell session.
 | `internal/templates/` | `html/template` files (embedded via `go:embed`) for the auth validation site |
 | `internal/workspace/` | Workspace registry |
 | `internal/terminal/` | PTY session management |
-| `client/` | Vite + React + TypeScript SPA |
+| `client/` | Vite + React + TypeScript SPA (with demo mode support) |
+| `client/src/services/` | API service layer with real and demo stub implementations |
 | `docs/examples/dev-console.yaml.example` | Annotated sample configuration |
 | `Makefile` | `make build`, `make dev`, `make test` targets |
+| `.github/workflows/demo-preview.yml` | Per-PR Cloudflare Pages preview deployment |
 
 ---
 
@@ -354,6 +400,52 @@ reflected in `git/status`.
 - Structured JSON request logging (method, path, status, latency, user)
 - Health-check endpoint `GET /healthz`
 - Version endpoint `GET /api/version` returning build commit and date
+
+---
+
+## Testing & Validation Strategy
+
+### Demo Mode
+
+Every phase that adds or changes frontend UI must ship with demo mode support:
+running `VITE_DEMO_MODE=true npm run build` inside `client/` must produce a fully
+self-contained static site that exercises the new UI without any backend.
+
+The service layer (`client/src/services/`) is the seam:
+
+| Module | Real mode | Demo mode |
+|--------|-----------|-----------|
+| `api.ts` | `fetch(…)` against the same origin | Returns hard-coded JSON stubs |
+| `terminalSocket.ts` | Gorilla WebSocket PTY | In-process xterm.js write loop |
+| `auth.ts` | `/auth/login` OAuth redirect | Immediate synthetic session |
+
+Each new service function must have a corresponding demo stub in the same file,
+selected by `if (import.meta.env.VITE_DEMO_MODE)`.
+
+### PR Preview Deployments
+
+Pull requests that modify `client/` automatically receive a Cloudflare Pages
+preview URL via the `demo-preview` GitHub Actions workflow. This lets reviewers
+interact with UI changes before the server-side work is complete or merged.
+
+The preview is built with `VITE_DEMO_MODE=true`, so:
+
+- No backend credentials or infra are needed to review UI changes.
+- The preview is completely safe — no data is read or written.
+- The preview URL persists for the life of the PR branch.
+
+Reviewers should include a screenshot or screen recording of the Cloudflare Pages
+preview URL in the PR description when making user-visible UI changes.
+
+### Acceptance Gate
+
+In addition to the per-phase acceptance criteria above, the following must hold
+before any phase is considered done:
+
+1. `VITE_DEMO_MODE=true npm run build` succeeds with no errors.
+2. The demo build can be served locally with `npm run preview` and all UI flows
+   described in the phase acceptance criteria work without a backend.
+3. The `demo-preview` workflow completes successfully and produces a preview URL.
 
 ---
 
