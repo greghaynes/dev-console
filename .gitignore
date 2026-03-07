@@ -1,0 +1,9 @@
+# Build output
+bin/
+
+# Local config (may contain secrets)
+dev-console.yaml
+
+# Go test cache and coverage output
+*.test
+*.out
