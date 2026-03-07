@@ -19,7 +19,7 @@ and get a fully functional terminal in that workspace. Nothing else.
 This is the foundational slice. Every later phase builds on top of the server,
 the auth middleware, and the client shell created here.
 
-### 1.1 Server Scaffolding
+### 1.1 Server Scaffolding ✅
 
 - `go.mod` / `go.sum` with initial dependencies
   (`gorilla/mux`, `gorilla/websocket`, `creack/pty`, `golang-jwt/jwt`,
@@ -32,7 +32,7 @@ the auth middleware, and the client shell created here.
 **Acceptance:** `go build ./...` succeeds; `./dev-console --config dev-console.yaml`
 starts and listens.
 
-### 1.2 GitHub OAuth Authentication
+### 1.2 GitHub OAuth Authentication ✅
 
 - `internal/auth/` package
   - OAuth redirect handler (`GET /login`)
