@@ -29,7 +29,8 @@ vet:
 lint:
 	golangci-lint run ./...
 
-# Build the documentation site (requires Hugo extended ≥ 0.146.0).
+# Build the documentation site (requires Hugo extended).
+# Outputs to site/public/.
 site-build:
 	cd site && hugo --minify
 
