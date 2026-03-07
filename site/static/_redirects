@@ -1,0 +1,7 @@
+# Redirect bare /demo to the canonical trailing-slash URL so that the
+# browser's base URL is /demo/ and relative asset paths resolve correctly.
+/demo /demo/ 301
+
+# Serve the SPA entry-point for every path under /demo/ so that React
+# Router can handle client-side navigation (e.g. /demo/demo after login).
+/demo/* /demo/index.html 200
