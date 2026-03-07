@@ -1,4 +1,4 @@
-.PHONY: build test dev clean lint vet site-build site-serve
+.PHONY: build test test-race dev clean lint vet site-build site-serve
 
 # Build the server binary.
 build:
