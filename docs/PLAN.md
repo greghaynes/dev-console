@@ -51,7 +51,36 @@ user lands back on the server with a valid session cookie. A user not on the
 allowlist sees a 403. A `/api/whoami` endpoint returns `{ login, id }` for the
 authenticated user.
 
-### 1.3 Workspace Registration
+### 1.3 Auth Validation Site
+
+A minimal server-rendered HTML site (no external JS dependencies) served directly
+by the Go backend to allow manual testing and validation of the auth system before
+the full React SPA exists.
+
+Pages / endpoints:
+
+- `GET /` — if the session cookie is absent or invalid, redirect to `/login`;
+  otherwise render a simple HTML page showing:
+  - The authenticated user's GitHub login and ID (fetched from `/api/whoami`)
+  - A "Sign out" form that posts to `/logout`
+  - A brief confirmation that the session is valid
+- `GET /login` — renders a page with a "Sign in with GitHub" link pointing to the
+  OAuth redirect (`GET /auth/login`)
+- The existing `/api/whoami`, `/auth/login`, `/auth/callback`, and `/auth/logout`
+  endpoints from step 1.2 remain unchanged
+
+The site uses only inline CSS so it can be embedded as Go template strings; no
+build step is required. It is intentionally replaced by the React SPA in step 1.6.
+
+**Acceptance:** After completing step 1.2 configuration, an operator can:
+1. Open the server URL in a browser and be redirected to the GitHub OAuth flow.
+2. Complete the OAuth flow and land on the index page showing their login name.
+3. Confirm that visiting the index page with no cookie redirects to `/login`.
+4. Confirm that a GitHub login **not** on the allowlist receives a 403 page.
+5. Click "Sign out" and confirm the session cookie is cleared and the browser
+   returns to the login page.
+
+### 1.4 Workspace Registration
 
 - `internal/workspace/` package — `Workspace` struct, in-memory registry loaded
   from config
@@ -62,7 +91,7 @@ authenticated user.
 **Acceptance:** Config lists one workspace; `curl /api/workspaces` returns it as
 JSON.
 
-### 1.4 Terminal Backend
+### 1.5 Terminal Backend
 
 - `internal/terminal/` package
   - `Session` — wraps a `creack/pty` PTY + `exec.Cmd` (shell) + mutex-protected
@@ -81,7 +110,7 @@ JSON.
 **Acceptance:** `websocat` or a small test harness can attach to the WebSocket,
 send resize + input, and receive shell output.
 
-### 1.5 Minimal Web Client
+### 1.6 Minimal Web Client
 
 A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
 
@@ -110,6 +139,7 @@ shell session.
 | `cmd/dev-console/` | Server entry point |
 | `internal/config/` | Config loading |
 | `internal/auth/` | GitHub OAuth + session middleware |
+| `internal/templates/` | Go HTML templates for the auth validation site |
 | `internal/workspace/` | Workspace registry |
 | `internal/terminal/` | PTY session management |
 | `client/` | Vite + React + TypeScript SPA |
