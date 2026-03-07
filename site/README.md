@@ -55,4 +55,4 @@ Content here…
 ## Theme
 
 The site uses the [Hugo Book](https://github.com/alex-shpak/hugo-book) theme,
-vendored under `_vendor/` so no network access is required at build time.
+declared as a Hugo module in `go.mod`. It is fetched automatically at build time.

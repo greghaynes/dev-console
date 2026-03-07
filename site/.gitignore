@@ -4,3 +4,6 @@ public/
 
 # Hugo resource cache (SCSS compilation artifacts, etc.)
 resources/
+
+# Hugo vendored modules (fetched at build time via go.mod/go.sum)
+_vendor/
