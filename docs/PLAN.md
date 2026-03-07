@@ -151,16 +151,25 @@ if (import.meta.env.VITE_DEMO_MODE === 'true') {
 `VITE_DEMO_MODE === 'true'`: a persistent bar reading **"Demo mode — no data is
 saved"**.
 
-**Per-PR Cloudflare Pages deployment:**
+**Cloudflare Pages build configuration:**
 
-- `.github/workflows/demo-preview.yml` runs on every PR
-- When `client/` exists: builds the SPA with `VITE_DEMO_MODE=true` and
-  `--base /demo/`, copies the output to `site/static/demo/`, then builds the
-  Hugo documentation site; deploys the combined `site/public/` to the
-  `dev-console` Cloudflare Pages project
-- When `client/` does not yet exist: builds and deploys the docs site only
-- The demo is reachable at `<preview-url>/demo/` alongside the documentation
-- Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+The demo SPA is built as part of the Cloudflare Pages build — no separate CI
+workflow is needed. Configure the `dev-console` Cloudflare Pages project with:
+
+| Setting | Value |
+|---------|-------|
+| Build command | `make site-build-with-demo` |
+| Output directory | `site/public` |
+| Node.js version | `22` |
+| Environment variable | `VITE_DEMO_MODE=true` |
+
+Cloudflare Pages' native GitHub integration triggers a build on every commit and
+PR, and posts a deployment status with a preview URL directly on the PR. The demo
+is accessible at `<preview-url>/demo/` alongside the documentation.
+
+When `client/` does not yet exist (before Phase 1.4 is implemented), the build
+command degrades gracefully: the `@if [ -d "client" ] && [ -f "client/package.json" ]`
+guard in `make site-build-with-demo` is a no-op and only the Hugo docs are deployed.
 
 **Acceptance:**
 
@@ -168,8 +177,8 @@ saved"**.
    dependency.
 2. `npm run preview` shows the login page; entering `demo` as the password
    navigates to the placeholder page; entering anything else shows an error.
-3. A PR triggers the `demo-preview` workflow; the Cloudflare Pages preview URL
-   points to the docs site with the demo accessible at `<preview-url>/demo/`.
+3. Cloudflare Pages posts a preview URL on the PR; the demo is accessible at
+   `<preview-url>/demo/` alongside the documentation.
 
 ### 1.5 Workspace Registration
 
@@ -250,8 +259,8 @@ phase's changes will automatically trigger a preview.
    dependency.
 2. `npm run preview` shows the demo banner and the full flow (login → workspace
    list → open terminal → interactive echo session) without any backend.
-3. The `demo-preview` CI workflow produces a Cloudflare Pages preview URL for
-   the PR.
+3. Cloudflare Pages posts a preview URL on the PR; the demo is accessible at
+   `<preview-url>/demo/` alongside the documentation.
 4. Against a real server (no `VITE_DEMO_MODE`): login → workspace list → open
    terminal → interactive shell session.
 
@@ -269,8 +278,7 @@ phase's changes will automatically trigger a preview.
 | `client/` | Vite + React + TypeScript SPA (bootstrapped in Phase 1.4) |
 | `client/src/mocks/` | MSW handlers and browser/server worker entry points (created in Phase 1.4) |
 | `docs/examples/dev-console.yaml.example` | Annotated sample configuration |
-| `Makefile` | `make build`, `make dev`, `make test` targets |
-| `.github/workflows/demo-preview.yml` | Per-PR deployment of docs + demo to Cloudflare Pages; demo accessible at `/demo/` (created in Phase 1.4) |
+| `Makefile` | `make build`, `make dev`, `make test`, `make site-build-with-demo` targets |
 
 ---
 
@@ -566,21 +574,21 @@ local `npm run demo` convenience script. It is never set in the production build
 
 ### PR Preview Deployments
 
-The `.github/workflows/demo-preview.yml` workflow runs on every PR. It:
+The `dev-console` Cloudflare Pages project is configured to use
+`make site-build-with-demo` as its build command (`site/public` as the output
+directory). Cloudflare Pages' native GitHub integration takes care of the rest:
 
-1. When `client/` exists: installs Node.js dependencies and builds the SPA with
-   `VITE_DEMO_MODE=true` and `--base /demo/`; copies the output to
-   `site/static/demo/`.
-2. Installs Hugo (extended) and runs `make site-build` to produce `site/public/`,
-   which includes the documentation **and** the demo SPA at the `/demo/` path.
-3. Deploys the unified `site/public/` to the `dev-console` Cloudflare Pages
-   project using `cloudflare/pages-action`.
-4. Posts the preview URL as a deployment status on the PR; the demo is accessible
-   at `<preview-url>/demo/` alongside the documentation.
+1. On every PR commit, Cloudflare Pages runs `make site-build-with-demo`.
+2. If `client/` exists, the target builds the SPA with `VITE_DEMO_MODE=true` and
+   `--base /demo/`, copies the output to `site/static/demo/`, then runs Hugo to
+   produce `site/public/` with the documentation **and** the demo at `/demo/`.
+3. If `client/` does not yet exist (or has no `package.json`), the guard in
+   `make site-build-with-demo` is a no-op and only the Hugo docs are built and
+   deployed.
+4. Cloudflare Pages posts a deployment status with the preview URL directly on
+   the PR. The demo is accessible at `<preview-url>/demo/`.
 
-This means the first PR to introduce any frontend component automatically gets a
-live preview URL with the demo at `/demo/` — no server required. PRs that don't
-yet include a `client/` directory still receive a documentation-only preview.
+No GitHub Actions workflow or repository secrets are required for deployments.
 
 PRs that include user-visible UI changes **must** include a screenshot or screen
 recording taken from the `<preview-url>/demo/` Cloudflare Pages URL in the PR
@@ -595,8 +603,8 @@ A phase is not done until all of the following hold:
    covering all UI flows introduced in the phase — no backend required.
 3. `npm test` (Vitest) passes; tests exercise components using the same MSW
    handlers as the demo.
-4. The `demo-preview` CI workflow completes successfully and a preview URL is
-   visible in the PR.
+4. Cloudflare Pages posts a preview URL on the PR with the demo accessible at
+   `<preview-url>/demo/`.
 
 ---
 

@@ -1,4 +1,4 @@
-.PHONY: build test test-race dev clean lint vet site-build site-serve
+.PHONY: build test test-race dev clean lint vet site-build site-build-with-demo site-serve
 
 # Build the server binary.
 build:
@@ -31,6 +31,17 @@ lint:
 
 # Build the documentation site (requires Hugo extended ≥ 0.146.0).
 site-build:
+	cd site && hugo --minify
+
+# Build the documentation site together with the frontend demo (if client/ exists).
+# This is the Cloudflare Pages build command: set output directory to site/public.
+# Cloudflare Pages project settings must include VITE_DEMO_MODE=true and NODE_VERSION=22.
+site-build-with-demo:
+	@if [ -d "client" ] && [ -f "client/package.json" ]; then \
+		set -e; \
+		cd client && npm ci && VITE_DEMO_MODE=true npm run build -- --base /demo/ && \
+		mkdir -p ../site/static/demo && cp -r dist/. ../site/static/demo/; \
+	fi
 	cd site && hugo --minify
 
 # Serve the documentation site locally with live reload.
