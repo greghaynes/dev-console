@@ -35,10 +35,10 @@ starts and listens.
 ### 1.2 GitHub OAuth Authentication
 
 - `internal/auth/` package
-  - OAuth redirect handler (`GET /login`)
-  - OAuth callback handler (`GET /callback`) — exchanges code for token, fetches
-    GitHub user, sets signed HTTP-only session cookie
-  - Logout handler (`POST /logout`)
+  - OAuth redirect handler (`GET /auth/login`) — initiates the GitHub OAuth flow
+  - OAuth callback handler (`GET /auth/callback`) — exchanges code for token,
+    fetches GitHub user, sets signed HTTP-only session cookie
+  - Logout handler (`POST /auth/logout`) — clears the session cookie
   - `RequireAuth` middleware that validates the session cookie on every protected
     route; redirects unauthenticated requests to `/login`
 - JWT-based stateless sessions signed with operator-supplied `sessionSecret`;
@@ -46,8 +46,8 @@ starts and listens.
 - Operator-configured allowlist of GitHub login names; returns 403 for users not
   on the list
 
-**Acceptance:** Visiting the server redirects to GitHub; after authorisation the
-user lands back on the server with a valid session cookie. A user not on the
+**Acceptance:** Hitting `GET /auth/login` redirects to GitHub; after authorisation
+the user lands back on the server with a valid session cookie. A user not on the
 allowlist sees a 403. A `/api/whoami` endpoint returns `{ login, id }` for the
 authenticated user.
 
@@ -61,23 +61,30 @@ Pages / endpoints:
 
 - `GET /` — if the session cookie is absent or invalid, redirect to `/login`;
   otherwise render a simple HTML page showing:
-  - The authenticated user's GitHub login and ID (fetched from `/api/whoami`)
-  - A "Sign out" form that posts to `/logout`
+  - The authenticated user's GitHub login and ID (from `/api/whoami`)
+  - A "Sign out" form that posts to `/auth/logout`
   - A brief confirmation that the session is valid
-- `GET /login` — renders a page with a "Sign in with GitHub" link pointing to the
-  OAuth redirect (`GET /auth/login`)
-- The existing `/api/whoami`, `/auth/login`, `/auth/callback`, and `/auth/logout`
+- `GET /login` — renders a page with a "Sign in with GitHub" link pointing to
+  `GET /auth/login` (the OAuth redirect handler from step 1.2)
+- The `/api/whoami`, `/auth/login`, `/auth/callback`, and `/auth/logout`
   endpoints from step 1.2 remain unchanged
 
-The site uses only inline CSS so it can be embedded as Go template strings; no
-build step is required. It is intentionally replaced by the React SPA in step 1.6.
+Templates are Go `html/template` files stored in `internal/templates/` and
+embedded in the binary via `go:embed`; styling uses only inline CSS so no
+additional build step is required. This site is intentionally replaced by the
+React SPA in step 1.6.
 
 **Acceptance:** After completing step 1.2 configuration, an operator can:
-1. Open the server URL in a browser and be redirected to the GitHub OAuth flow.
-2. Complete the OAuth flow and land on the index page showing their login name.
-3. Confirm that visiting the index page with no cookie redirects to `/login`.
-4. Confirm that a GitHub login **not** on the allowlist receives a 403 page.
-5. Click "Sign out" and confirm the session cookie is cleared and the browser
+1. Open the server URL in a browser; when unauthenticated, be redirected to
+   `/login` and see a page with a "Sign in with GitHub" link.
+2. Click the "Sign in with GitHub" link and be redirected to the GitHub OAuth
+   flow.
+3. Complete the OAuth flow and land on the index page (`/`) showing their
+   GitHub login name.
+4. Confirm that visiting `/` with no or an invalid cookie redirects to `/login`.
+5. Confirm that a GitHub login **not** on the allowlist receives a 403 page
+   after completing OAuth.
+6. Click "Sign out" and confirm the session cookie is cleared and the browser
    returns to the login page.
 
 ### 1.4 Workspace Registration
@@ -139,7 +146,7 @@ shell session.
 | `cmd/dev-console/` | Server entry point |
 | `internal/config/` | Config loading |
 | `internal/auth/` | GitHub OAuth + session middleware |
-| `internal/templates/` | Go HTML templates for the auth validation site |
+| `internal/templates/` | `html/template` files (embedded via `go:embed`) for the auth validation site |
 | `internal/workspace/` | Workspace registry |
 | `internal/terminal/` | PTY session management |
 | `client/` | Vite + React + TypeScript SPA |
