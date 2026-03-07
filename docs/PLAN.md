@@ -113,7 +113,7 @@ shell session.
 | `internal/workspace/` | Workspace registry |
 | `internal/terminal/` | PTY session management |
 | `client/` | Vite + React + TypeScript SPA |
-| `dev-console.yaml.example` | Annotated sample configuration |
+| `docs/examples/dev-console.yaml.example` | Annotated sample configuration |
 | `Makefile` | `make build`, `make dev`, `make test` targets |
 
 ---
