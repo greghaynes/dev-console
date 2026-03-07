@@ -38,14 +38,15 @@ server is needed.
 
 ## Quick Start
 
+> **Note:** The project is under active development. The build tooling and
+> example config described below are planned as part of Phase 1 (see
+> [docs/PLAN.md](docs/PLAN.md)) and are not yet available in the repository.
+
+Once Phase 1 is complete, the intended workflow will be:
+
 1. **Create a GitHub OAuth App** and note the client ID / secret.
-2. **Copy the example config** and fill in your values:
-
-   ```sh
-   cp dev-console.yaml.example dev-console.yaml
-   $EDITOR dev-console.yaml
-   ```
-
+2. **Create a config file** based on the **Configuration** section below and
+   fill in your values.
 3. **Build and run:**
 
    ```sh
@@ -130,4 +131,5 @@ threat model.
 
 ## License
 
-See [LICENSE](LICENSE).
+Licensing has not yet been finalized. Until a `LICENSE` file is added, all
+rights are reserved.
