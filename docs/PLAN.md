@@ -43,7 +43,7 @@ starts and listens.
     route; redirects unauthenticated requests to `/login`
 - JWT-based stateless sessions signed with operator-supplied `sessionSecret`;
   configurable TTL (default 24 h)
-- Operator-configured allowlist of GitHub login names; returns 403 for users not
+- Operator-configured allowlist of GitHub user IDs; returns 403 for users not
   on the list
 
 **Acceptance:** Hitting `GET /auth/login` redirects to GitHub; after authorization
