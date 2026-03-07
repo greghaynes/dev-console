@@ -131,5 +131,4 @@ threat model.
 
 ## License
 
-Licensing has not yet been finalized. Until a `LICENSE` file is added, all
-rights are reserved.
+This project is licensed under the [MIT License](LICENSE).
