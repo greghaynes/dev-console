@@ -11,7 +11,7 @@ Requires [Hugo extended](https://gohugo.io/installation/).
 make site-build
 ```
 
-The built site is output to `public/` at the repository root. This directory is
+The built site is output to `site/public/`. This directory is
 excluded from version control (`.gitignore`).
 
 ## Content
@@ -25,4 +25,4 @@ Content is served from two sources:
 ## Deployment
 
 The site is deployed automatically via Cloudflare Pages. The build command is
-`make site-build` and the publish directory is `public/`.
+`make site-build` and the publish directory is `site/public`.

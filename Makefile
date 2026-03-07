@@ -30,9 +30,9 @@ lint:
 	golangci-lint run ./...
 
 # Build the documentation site (requires Hugo extended).
-# Outputs to public/ at the repository root.
+# Outputs to site/public/.
 site-build:
-	cd site && hugo --minify --destination ../public
+	cd site && hugo --minify
 
 # Serve the documentation site locally with live reload.
 site-serve:
