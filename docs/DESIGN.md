@@ -1,3 +1,8 @@
+---
+title: "Design Document"
+weight: 10
+---
+
 # Dev Console — Product Design Document
 
 ## 1. Overview

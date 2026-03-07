@@ -1,3 +1,8 @@
+---
+title: "Implementation Plan"
+weight: 20
+---
+
 # Dev Console — Phased Implementation Plan
 
 This document translates the product design (see [DESIGN.md](DESIGN.md)) into an

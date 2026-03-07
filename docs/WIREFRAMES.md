@@ -1,3 +1,8 @@
+---
+title: "Wireframes"
+weight: 30
+---
+
 # Dev Console — Low-Fidelity Wireframes
 
 These ASCII wireframes illustrate the primary screens of the Dev Console web

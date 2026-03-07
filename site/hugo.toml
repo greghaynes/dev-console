@@ -32,5 +32,17 @@ publishDir = "public"
     weight = 10
 
 [module]
+  [[module.mounts]]
+    source = "content"
+    target = "content"
+  [[module.mounts]]
+    source = "static"
+    target = "static"
+  [[module.mounts]]
+    source = "archetypes"
+    target = "archetypes"
+  [[module.mounts]]
+    source = "../docs"
+    target = "content/docs"
   [[module.imports]]
     path = "github.com/alex-shpak/hugo-book"
