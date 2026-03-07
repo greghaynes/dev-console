@@ -78,7 +78,7 @@ Pages / endpoints:
 Templates are Go `html/template` files stored in `internal/templates/` and
 embedded in the binary via `go:embed`; styling uses only inline CSS so no
 additional build step is required. This site is intentionally replaced by the
-React SPA in step 1.6.
+React SPA in step 1.7.
 
 **Acceptance:** After completing step 1.2 configuration, an operator can:
 
@@ -94,7 +94,68 @@ React SPA in step 1.6.
 6. Click "Sign out" and confirm the session cookie is cleared and the browser
    returns to the login page.
 
-### 1.4 Workspace Registration
+### 1.4 Demo Login Page
+
+The earliest deliverable with a previewable frontend: a minimal Vite + React +
+TypeScript SPA that renders only the `LoginPage`. This phase ships the entire
+demo-mode infrastructure and the per-PR CI preview workflow before any real
+backend plumbing beyond auth exists.
+
+**Client setup:**
+
+- Vite project bootstrapped in `client/` with TypeScript, React, and Tailwind
+  CSS (dark theme)
+
+**`LoginPage` component:**
+
+- **Demo mode** (`VITE_DEMO_MODE === 'true'`): renders a "Try Demo" heading, a
+  password field, and a "Log in" button. Entering the static password `demo`
+  navigates to a placeholder `/demo` page that reads "You're in — demo mode
+  active". Entering any other password shows an inline error message. No network
+  call is made.
+- **Production mode**: renders a "Sign in with GitHub" button pointing to
+  `/auth/login`
+
+**MSW infrastructure** (created here, extended in later phases):
+
+```text
+client/src/mocks/
+  handlers.ts   # starts empty except for GET /api/whoami → { login: "demo", id: 0 }
+  browser.ts    # startWorker() — MSW Service Worker bootstrap
+  server.ts     # setupServer() — Vitest / Node.js mock server
+```
+
+`client/src/main.tsx` conditionally starts the worker:
+
+```ts
+if (import.meta.env.VITE_DEMO_MODE === 'true') {
+  const { startWorker } = await import('./mocks/browser')
+  await startWorker()
+}
+```
+
+**`DemoBanner`** component rendered at the app root whenever
+`VITE_DEMO_MODE === 'true'`: a persistent bar reading **"Demo mode — no data is
+saved"**.
+
+**Per-PR Cloudflare Pages deployment:**
+
+- `.github/workflows/demo-preview.yml` runs on every PR that touches `client/`
+- Builds with `VITE_DEMO_MODE=true` and deploys `client/dist` to the
+  `dev-console-demo` Cloudflare Pages project
+- Cloudflare Pages posts a preview URL as a deployment status comment
+- Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+
+**Acceptance:**
+
+1. `VITE_DEMO_MODE=true npm run build` produces a static bundle with no server
+   dependency.
+2. `npm run preview` shows the login page; entering `demo` as the password
+   navigates to the placeholder page; entering anything else shows an error.
+3. A PR that modifies `client/` triggers the `demo-preview` workflow and a
+   Cloudflare Pages preview URL appears in the PR.
+
+### 1.5 Workspace Registration
 
 - `internal/workspace/` package — `Workspace` struct, in-memory registry loaded
   from config
@@ -105,7 +166,7 @@ React SPA in step 1.6.
 **Acceptance:** Config lists one workspace; `curl /api/workspaces` returns it as
 JSON.
 
-### 1.5 Terminal Backend
+### 1.6 Terminal Backend
 
 - `internal/terminal/` package
   - `Session` — wraps a `creack/pty` PTY + `exec.Cmd` (shell) + mutex-protected
@@ -124,7 +185,7 @@ JSON.
 **Acceptance:** `websocat` or a small test harness can attach to the WebSocket,
 send resize + input, and receive shell output.
 
-### 1.6 Minimal Web Client
+### 1.7 Minimal Web Client
 
 A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
 
@@ -142,37 +203,26 @@ Styling is minimal — Tailwind CSS with a dark theme matching a terminal aesthe
 No design polish is required at this stage.
 
 **Demo mode is a first-class deliverable of this phase, not an afterthought.**
-The MSW handlers, demo banner, and `demo-preview` CI workflow must be committed
-alongside the initial components — not in a follow-up PR. See the
+MSW handlers for every new endpoint must be committed alongside the components —
+not in a follow-up PR. See the
 [Testing & Validation Strategy](#testing--validation-strategy) for the full
 pattern.
 
-**Demo mode for this phase:**
+**Demo mode for this phase** (extends the handlers from Phase 1.4):
 
-- `src/mocks/handlers.ts` — MSW request handlers for all endpoints introduced
-  in this phase:
-  - `GET /api/whoami` → `{ login: "demo", id: 0 }`
+- Add to `src/mocks/handlers.ts`:
   - `GET /api/workspaces` → two hard-coded workspaces (`demo-web`, `demo-api`)
   - `GET /api/workspaces/:id` → metadata for the matching workspace
   - WebSocket `WS /api/workspaces/:id/terminals/:tid` → in-process echo handler
     that prints a welcome banner and echoes input; no system processes are
     spawned
   - `POST /api/workspaces/:id/terminals` → returns `{ terminalId: "demo-term" }`
-- `src/mocks/browser.ts` — starts the MSW Service Worker; called from `main.tsx`
-  when `import.meta.env.VITE_DEMO_MODE` is `true`
-- `LoginPage` in demo mode shows a "Try Demo" button instead of the GitHub OAuth
-  link; clicking it immediately navigates to `WorkspaceListPage`
-- A persistent banner across all pages reads **"Demo mode — no data is saved"**
+- Update `LoginPage` in demo mode: replace the password form from Phase 1.4 with
+  a "Try Demo" button that navigates directly to `WorkspaceListPage` (no
+  password prompt needed once the full flow is wired up)
 
-**Per-PR Cloudflare Pages deployment:**
-
-- The `.github/workflows/demo-preview.yml` workflow runs on every PR that
-  touches `client/`
-- It builds the SPA with `VITE_DEMO_MODE=true` and deploys `client/dist` to the
-  `dev-console-demo` Cloudflare Pages project
-- Cloudflare Pages posts a preview URL as a deployment status comment so
-  reviewers can click through the UI without standing up a server
-- Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+**Per-PR Cloudflare Pages deployment** is already active from Phase 1.4 — this
+phase's changes will automatically trigger a preview.
 
 **Acceptance:** The full flow works in Chrome and Safari on both desktop and a
 375 px wide mobile viewport:
@@ -181,8 +231,8 @@ pattern.
    dependency.
 2. `npm run preview` shows the demo banner and the full flow (login → workspace
    list → open terminal → interactive echo session) without any backend.
-3. A PR that modifies `client/` triggers the `demo-preview` workflow and a
-   Cloudflare Pages preview URL appears in the PR.
+3. The `demo-preview` CI workflow produces a Cloudflare Pages preview URL for
+   the PR.
 4. Against a real server (no `VITE_DEMO_MODE`): login → workspace list → open
    terminal → interactive shell session.
 
@@ -197,11 +247,11 @@ pattern.
 | `internal/templates/` | `html/template` files (embedded via `go:embed`) for the auth validation site |
 | `internal/workspace/` | Workspace registry |
 | `internal/terminal/` | PTY session management |
-| `client/` | Vite + React + TypeScript SPA with demo mode support |
-| `client/src/mocks/` | MSW handlers and browser worker entry point |
+| `client/` | Vite + React + TypeScript SPA (bootstrapped in Phase 1.4) |
+| `client/src/mocks/` | MSW handlers and browser/server worker entry points (created in Phase 1.4) |
 | `docs/examples/dev-console.yaml.example` | Annotated sample configuration |
 | `Makefile` | `make build`, `make dev`, `make test` targets |
-| `.github/workflows/demo-preview.yml` | Per-PR Cloudflare Pages preview deployment |
+| `.github/workflows/demo-preview.yml` | Per-PR Cloudflare Pages preview deployment (created in Phase 1.4) |
 
 ---
 
