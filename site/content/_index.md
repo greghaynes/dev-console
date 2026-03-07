@@ -7,6 +7,6 @@ code from mobile devices or thin web clients.
 
 ## Documentation
 
-- [Design Document](/docs/design/)
-- [Implementation Plan](/docs/plan/)
-- [Wireframes](/docs/wireframes/)
+- [Design Document]({{< relref "docs/design.md" >}})
+- [Implementation Plan]({{< relref "docs/plan.md" >}})
+- [Wireframes]({{< relref "docs/wireframes.md" >}})
