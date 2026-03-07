@@ -13,7 +13,7 @@ test-race:
 	go test -race -v ./...
 
 # Start the server in development mode using the example config.
-# Requires that dev-console.yaml exists; copy from dev-console.yaml.example.
+# Requires that dev-console.yaml exists; copy from docs/examples/dev-console.yaml.example.
 dev: build
 	./bin/dev-console --config dev-console.yaml
 
