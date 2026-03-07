@@ -1,5 +1,13 @@
 # Dev Console
 
+> **Personal Project Notice:** Dev Console is primarily a personal project.
+> It grew out of frustration with existing tooling: as someone who does
+> significant development from mobile devices, I found that AI-native
+> development workflows were largely unavailable or unusable on mobile.
+> This project is my attempt to solve that problem for myself. Contributions
+> and feedback are welcome, but please keep in mind that features and
+> priorities are driven by personal use cases.
+
 An AI-chat-first development environment for software engineers who want to code
 from mobile devices or thin web clients while the heavy lifting runs on
 self-managed Linux infrastructure.
