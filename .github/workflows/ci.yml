@@ -31,5 +31,13 @@ jobs:
       - name: Build
         run: make build
 
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Lint docs markdown
+        uses: DavidAnson/markdownlint-cli2-action@v19
+        with:
+          globs: "docs/**/*.md"
+
       - name: Test
         run: make test-race

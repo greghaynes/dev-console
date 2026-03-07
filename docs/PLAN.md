@@ -40,23 +40,60 @@ starts and listens.
 ### 1.2 GitHub OAuth Authentication ✅
 
 - `internal/auth/` package
-  - OAuth redirect handler (`GET /login`)
-  - OAuth callback handler (`GET /callback`) — exchanges code for token, fetches
-    GitHub user, sets signed HTTP-only session cookie
-  - Logout handler (`POST /logout`)
+  - OAuth redirect handler (`GET /auth/login`) — initiates the GitHub OAuth flow
+  - OAuth callback handler (`GET /auth/callback`) — exchanges code for token,
+    fetches GitHub user, sets signed HTTP-only session cookie
+  - Logout handler (`POST /auth/logout`) — clears the session cookie
   - `RequireAuth` middleware that validates the session cookie on every protected
     route; redirects unauthenticated requests to `/login`
 - JWT-based stateless sessions signed with operator-supplied `sessionSecret`;
   configurable TTL (default 24 h)
-- Operator-configured allowlist of GitHub login names; returns 403 for users not
+- Operator-configured allowlist of GitHub user IDs; returns 403 for users not
   on the list
 
-**Acceptance:** Visiting the server redirects to GitHub; after authorisation the
-user lands back on the server with a valid session cookie. A user not on the
+**Acceptance:** Hitting `GET /auth/login` redirects to GitHub; after authorization
+the user lands back on the server with a valid session cookie. A user not on the
 allowlist sees a 403. A `/api/whoami` endpoint returns `{ login, id }` for the
 authenticated user.
 
-### 1.3 Workspace Registration
+### 1.3 Auth Validation Site
+
+A minimal server-rendered HTML site (no external JS dependencies) served directly
+by the Go backend to allow manual testing and validation of the auth system before
+the full React SPA exists.
+
+Pages / endpoints:
+
+- `GET /` — if the session cookie is absent or invalid, redirect to `/login`;
+  otherwise render a simple HTML page showing:
+  - The authenticated user's GitHub login and ID (same data as `/api/whoami`,
+    resolved server-side from the session)
+  - A "Sign out" form that posts to `/auth/logout`
+  - A brief confirmation that the session is valid
+- `GET /login` — renders a page with a "Sign in with GitHub" link pointing to
+  `GET /auth/login` (the OAuth redirect handler from step 1.2)
+- The `/api/whoami`, `/auth/login`, `/auth/callback`, and `/auth/logout`
+  endpoints from step 1.2 remain unchanged
+
+Templates are Go `html/template` files stored in `internal/templates/` and
+embedded in the binary via `go:embed`; styling uses only inline CSS so no
+additional build step is required. This site is intentionally replaced by the
+React SPA in step 1.6.
+
+**Acceptance:** After completing step 1.2 configuration, an operator can:
+1. Open the server URL in a browser; when unauthenticated, be redirected to
+   `/login` and see a page with a "Sign in with GitHub" link.
+2. Click the "Sign in with GitHub" link and be redirected to the GitHub OAuth
+   flow.
+3. Complete the OAuth flow and land on the index page (`/`) showing their
+   GitHub login name.
+4. Confirm that visiting `/` with no or an invalid cookie redirects to `/login`.
+5. Confirm that a GitHub login **not** on the allowlist receives a 403 page
+   after completing OAuth.
+6. Click "Sign out" and confirm the session cookie is cleared and the browser
+   returns to the login page.
+
+### 1.4 Workspace Registration
 
 - `internal/workspace/` package — `Workspace` struct, in-memory registry loaded
   from config
@@ -67,7 +104,7 @@ authenticated user.
 **Acceptance:** Config lists one workspace; `curl /api/workspaces` returns it as
 JSON.
 
-### 1.4 Terminal Backend
+### 1.5 Terminal Backend
 
 - `internal/terminal/` package
   - `Session` — wraps a `creack/pty` PTY + `exec.Cmd` (shell) + mutex-protected
@@ -86,7 +123,7 @@ JSON.
 **Acceptance:** `websocat` or a small test harness can attach to the WebSocket,
 send resize + input, and receive shell output.
 
-### 1.5 Minimal Web Client
+### 1.6 Minimal Web Client
 
 A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
 
@@ -115,6 +152,7 @@ shell session.
 | `cmd/dev-console/` | Server entry point |
 | `internal/config/` | Config loading |
 | `internal/auth/` | GitHub OAuth + session middleware |
+| `internal/templates/` | `html/template` files (embedded via `go:embed`) for the auth validation site |
 | `internal/workspace/` | Workspace registry |
 | `internal/terminal/` | PTY session management |
 | `client/` | Vite + React + TypeScript SPA |
@@ -320,7 +358,7 @@ reflected in `git/status`.
 
 ## Dependency Map
 
-```
+```text
 Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5
               │                          │
               └──────────────────────────┘

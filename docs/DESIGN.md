@@ -39,7 +39,7 @@ terminal, all from a lightweight browser or mobile client.
 
 ## 3. Architecture Overview
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │                        Client Layer                          │
 │  ┌────────────────────┐    ┌────────────────────────────┐    │
@@ -82,13 +82,13 @@ assets from the same origin, removing CORS complexity.
 
 ### 4.1 GitHub OAuth Flow
 
-```
+```text
 Client                Server                  GitHub
   │                     │                       │
-  │── GET /login ───────▶│                       │
+  │── GET /auth/login ──▶│                       │
   │◀─ 302 → github.com ─│                       │
   │                     │                       │
-  │── GET /callback?code=… ─────────────────────▶│
+  │── GET /auth/callback?code=… ────────────────▶│
   │                     │◀── access_token ───────│
   │                     │── GET /user ───────────▶│
   │                     │◀── { login, id } ───────│
@@ -97,8 +97,8 @@ Client                Server                  GitHub
 ```
 
 1. The server is configured with a GitHub OAuth App `client_id` / `client_secret`.
-2. `/login` redirects to GitHub's authorization page with `scope=read:user`.
-3. GitHub redirects back to `/callback`; the server exchanges the code for an
+2. `/auth/login` redirects to GitHub's authorization page with `scope=read:user`.
+3. GitHub redirects back to `/auth/callback`; the server exchanges the code for an
    access token, fetches the user's GitHub login and numeric ID, then creates a
    signed, HTTP-only session cookie (JWT or opaque token backed by an in-memory
    or on-disk store).
@@ -125,7 +125,7 @@ configuration.
 
 ### 5.1 Data Model
 
-```
+```text
 Workspace {
   id:         string          // URL-safe slug, e.g. "my-project"
   name:       string          // Display name
@@ -162,7 +162,7 @@ can read and write files inside the workspace.
 
 ### 6.1 Data Model
 
-```
+```text
 AgentSession {
   id:          string
   workspaceId: string
@@ -333,7 +333,7 @@ auth:
   github:
     clientId:     "Ov23liABCDEFGH"
     clientSecret: "${GITHUB_CLIENT_SECRET}"   # env variable
-    callbackUrl:  "https://console.example.com/callback"
+    callbackUrl:  "https://console.example.com/auth/callback"
   allowedGithubUsers:
     - "alice"
     - "bob"
