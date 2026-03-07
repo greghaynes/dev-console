@@ -23,7 +23,7 @@ auth:
     clientSecret: "${GITHUB_CLIENT_SECRET}"   # never commit this in plain text
     # The callback URL must match the "Authorization callback URL" set in your
     # GitHub OAuth App settings.
-    callbackUrl:  "https://console.example.com/callback"
+    callbackUrl:  "https://console.example.com/auth/callback"
 
   # Only these GitHub usernames are permitted to log in.
   allowedGithubUsers:

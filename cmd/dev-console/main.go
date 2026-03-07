@@ -97,7 +97,7 @@ func buildRouter(cfg *config.Config) *mux.Router {
 	authHandler := auth.NewHandler(&cfg.Auth)
 
 	// Unauthenticated page routes.
-	r.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+	r.HandleFunc("/login", func(w http.ResponseWriter, _ *http.Request) {
 		templates.RenderLogin(w)
 	}).Methods(http.MethodGet)
 

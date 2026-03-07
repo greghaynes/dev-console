@@ -5,8 +5,8 @@ package templates
 import (
 	"bytes"
 	"embed"
-	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 )
 
@@ -33,10 +33,13 @@ type IndexData struct {
 func RenderIndex(w http.ResponseWriter, data IndexData) {
 	var buf bytes.Buffer
 	if err := indexTmpl.Execute(&buf, data); err != nil {
-		http.Error(w, fmt.Sprintf("rendering index page: %v", err), http.StatusInternalServerError)
+		log.Printf("templates: rendering index page: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// WriteTo error is intentionally ignored: at this point headers are sent
+	// and there is nothing meaningful to do if the client disconnects mid-write.
 	_, _ = buf.WriteTo(w)
 }
 
@@ -44,9 +47,12 @@ func RenderIndex(w http.ResponseWriter, data IndexData) {
 func RenderLogin(w http.ResponseWriter) {
 	var buf bytes.Buffer
 	if err := loginTmpl.Execute(&buf, nil); err != nil {
-		http.Error(w, fmt.Sprintf("rendering login page: %v", err), http.StatusInternalServerError)
+		log.Printf("templates: rendering login page: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// WriteTo error is intentionally ignored: at this point headers are sent
+	// and there is nothing meaningful to do if the client disconnects mid-write.
 	_, _ = buf.WriteTo(w)
 }
