@@ -1,4 +1,4 @@
-.PHONY: build test dev clean lint vet
+.PHONY: build test test-race dev clean lint vet site-build site-serve
 
 # Build the server binary.
 build:
@@ -28,3 +28,12 @@ vet:
 # Run the linter (requires golangci-lint to be installed).
 lint:
 	golangci-lint run ./...
+
+# Build the documentation site (requires Hugo extended ≥ 0.146.0).
+site-build:
+	cd site && hugo --minify
+
+# Serve the documentation site locally with live reload.
+site-serve:
+	cd site && hugo server
+

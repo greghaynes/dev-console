@@ -104,6 +104,30 @@ repository. Until a `Makefile` is added, please refer to the project-specific
 setup and run instructions (and [docs/PLAN.md](docs/PLAN.md)) for the current
 development, testing, and build process.
 
+## Documentation
+
+- [Design Document](docs/DESIGN.md)
+- [Implementation Plan](docs/PLAN.md)
+- [Wireframes](docs/WIREFRAMES.md)
+
+## Docs Site
+
+The `site/` directory contains a [Hugo](https://gohugo.io/) static site built
+from the docs above, deployable to [Cloudflare Pages](https://pages.cloudflare.com/).
+
+```sh
+make site-serve   # serve locally with live reload
+make site-build   # build static output to site/public/
+```
+
+**Cloudflare Pages settings** (root directory: `site`):
+
+| Setting | Value |
+|---------|-------|
+| Build command | `hugo --minify` |
+| Build output directory | `public` |
+| `HUGO_VERSION` | `0.146.0` |
+
 ## Roadmap
 
 See [docs/PLAN.md](docs/PLAN.md) for the full phased implementation plan and
