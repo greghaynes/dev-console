@@ -102,13 +102,17 @@ demo-mode infrastructure and the per-PR CI preview workflow before any real
 backend plumbing beyond auth exists.
 
 **Deployment model for this phase:** The React SPA is built as a standalone
-static bundle and deployed **only to Cloudflare Pages** for demo previews. It
-is **not** embedded in the Go binary at this stage. The Go-embedded HTML
-templates from Phase 1.3 (`internal/templates/`) continue to serve `/login`
-and `/` for any running Go server instance. The SPA does not register any
-Service Worker routes that would intercept Go-served pages; it runs on a
-completely separate origin (the Cloudflare Pages domain). The compiled SPA
-replaces the Go templates in Phase 1.7, when it is embedded via `go:embed`.
+static bundle deployed as part of the existing documentation site on Cloudflare
+Pages — it is **not** embedded in the Go binary at this stage. Vite builds with
+`--base /demo/`, and the output is copied into `site/static/demo/` before Hugo
+runs. Hugo treats it as static content and includes it verbatim in `site/public/demo/`.
+The demo is therefore accessible at the `/demo/` path on the same Cloudflare
+Pages origin as the documentation, and no separate Cloudflare Pages project is
+required. The Go-embedded HTML templates from Phase 1.3 (`internal/templates/`)
+continue to serve `/login` and `/` for any running Go server instance. The SPA
+does not interfere with Go-served routes because it is hosted on the Cloudflare
+Pages documentation origin (a separate domain). The compiled SPA replaces the
+Go templates in Phase 1.7, when it is embedded in the binary via `go:embed`.
 
 **Client setup:**
 
@@ -149,10 +153,13 @@ saved"**.
 
 **Per-PR Cloudflare Pages deployment:**
 
-- `.github/workflows/demo-preview.yml` runs on every PR that touches `client/`
-- Builds with `VITE_DEMO_MODE=true` and deploys `client/dist` to the
-  `dev-console-demo` Cloudflare Pages project
-- Cloudflare Pages posts a preview URL as a deployment status comment
+- `.github/workflows/demo-preview.yml` runs on every PR
+- When `client/` exists: builds the SPA with `VITE_DEMO_MODE=true` and
+  `--base /demo/`, copies the output to `site/static/demo/`, then builds the
+  Hugo documentation site; deploys the combined `site/public/` to the
+  `dev-console` Cloudflare Pages project
+- When `client/` does not yet exist: builds and deploys the docs site only
+- The demo is reachable at `<preview-url>/demo/` alongside the documentation
 - Required repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
 
 **Acceptance:**
@@ -161,8 +168,8 @@ saved"**.
    dependency.
 2. `npm run preview` shows the login page; entering `demo` as the password
    navigates to the placeholder page; entering anything else shows an error.
-3. A PR that modifies `client/` triggers the `demo-preview` workflow and a
-   Cloudflare Pages preview URL appears in the PR.
+3. A PR triggers the `demo-preview` workflow; the Cloudflare Pages preview URL
+   points to the docs site with the demo accessible at `<preview-url>/demo/`.
 
 ### 1.5 Workspace Registration
 
@@ -263,7 +270,7 @@ phase's changes will automatically trigger a preview.
 | `client/src/mocks/` | MSW handlers and browser/server worker entry points (created in Phase 1.4) |
 | `docs/examples/dev-console.yaml.example` | Annotated sample configuration |
 | `Makefile` | `make build`, `make dev`, `make test` targets |
-| `.github/workflows/demo-preview.yml` | Per-PR Cloudflare Pages preview deployment (created in Phase 1.4) |
+| `.github/workflows/demo-preview.yml` | Per-PR deployment of docs + demo to Cloudflare Pages; demo accessible at `/demo/` (created in Phase 1.4) |
 
 ---
 
@@ -559,20 +566,25 @@ local `npm run demo` convenience script. It is never set in the production build
 
 ### PR Preview Deployments
 
-The `.github/workflows/demo-preview.yml` workflow runs on every PR that touches
-`client/`. It:
+The `.github/workflows/demo-preview.yml` workflow runs on every PR. It:
 
-1. Installs Node.js dependencies (`npm ci`).
-2. Builds the SPA with `VITE_DEMO_MODE=true` (`npm run build`).
-3. Deploys `client/dist` to the `dev-console-demo` Cloudflare Pages project
-   using `cloudflare/pages-action`.
-4. Posts the preview URL as a deployment status on the PR.
+1. When `client/` exists: installs Node.js dependencies and builds the SPA with
+   `VITE_DEMO_MODE=true` and `--base /demo/`; copies the output to
+   `site/static/demo/`.
+2. Installs Hugo (extended) and runs `make site-build` to produce `site/public/`,
+   which includes the documentation **and** the demo SPA at the `/demo/` path.
+3. Deploys the unified `site/public/` to the `dev-console` Cloudflare Pages
+   project using `cloudflare/pages-action`.
+4. Posts the preview URL as a deployment status on the PR; the demo is accessible
+   at `<preview-url>/demo/` alongside the documentation.
 
 This means the first PR to introduce any frontend component automatically gets a
-live preview URL — no server required.
+live preview URL with the demo at `/demo/` — no server required. PRs that don't
+yet include a `client/` directory still receive a documentation-only preview.
 
 PRs that include user-visible UI changes **must** include a screenshot or screen
-recording taken from the Cloudflare Pages preview URL in the PR description.
+recording taken from the `<preview-url>/demo/` Cloudflare Pages URL in the PR
+description.
 
 ### Acceptance Gate (applies to every phase with frontend work)
 
