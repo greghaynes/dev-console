@@ -1,5 +1,10 @@
 # Dev Console
 
+This is a personal project for experimenting with alternative UIs designed for
+AI-native development of cloud-native applications from mobile devices. While
+existing tools are usable on some mobile devices, they are not ideal for this
+workflow.
+
 An AI-chat-first development environment for software engineers who want to code
 from mobile devices or thin web clients while the heavy lifting runs on
 self-managed Linux infrastructure.
