@@ -34,7 +34,7 @@ terminal, all from a lightweight browser or mobile client.
 
 ## 3. Architecture Overview
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │                        Client Layer                          │
 │  ┌────────────────────┐    ┌────────────────────────────┐    │
@@ -77,7 +77,7 @@ assets from the same origin, removing CORS complexity.
 
 ### 4.1 GitHub OAuth Flow
 
-```
+```text
 Client                Server                  GitHub
   │                     │                       │
   │── GET /login ───────▶│                       │
@@ -120,7 +120,7 @@ configuration.
 
 ### 5.1 Data Model
 
-```
+```text
 Workspace {
   id:         string          // URL-safe slug, e.g. "my-project"
   name:       string          // Display name
@@ -157,7 +157,7 @@ can read and write files inside the workspace.
 
 ### 6.1 Data Model
 
-```
+```text
 AgentSession {
   id:          string
   workspaceId: string
