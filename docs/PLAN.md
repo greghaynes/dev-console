@@ -101,6 +101,15 @@ TypeScript SPA that renders only the `LoginPage`. This phase ships the entire
 demo-mode infrastructure and the per-PR CI preview workflow before any real
 backend plumbing beyond auth exists.
 
+**Deployment model for this phase:** The React SPA is built as a standalone
+static bundle and deployed **only to Cloudflare Pages** for demo previews. It
+is **not** embedded in the Go binary at this stage. The Go-embedded HTML
+templates from Phase 1.3 (`internal/templates/`) continue to serve `/login`
+and `/` for any running Go server instance. The SPA does not register any
+Service Worker routes that would intercept Go-served pages; it runs on a
+completely separate origin (the Cloudflare Pages domain). The compiled SPA
+replaces the Go templates in Phase 1.7, when it is embedded via `go:embed`.
+
 **Client setup:**
 
 - Vite project bootstrapped in `client/` with TypeScript, React, and Tailwind
@@ -197,7 +206,10 @@ A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
   an `xterm.js` `Terminal` instance attached to it; sends resize events when the
   window resizes; cleans up on unmount
 
-The compiled SPA is embedded in the Go binary via `go:embed` and served from `/`.
+The compiled SPA is embedded in the Go binary via `go:embed` and served from
+`/`, replacing the Go-embedded HTML templates from Phase 1.3
+(`internal/templates/`). The `internal/templates/` package and its routes
+(`GET /` and `GET /login`) are removed in this phase once the SPA takes over.
 
 Styling is minimal — Tailwind CSS with a dark theme matching a terminal aesthetic.
 No design polish is required at this stage.
@@ -536,8 +548,14 @@ local `npm run demo` convenience script. It is never set in the production build
 
 - A persistent banner `DemoBanner` component, rendered at the root of the app
   when `VITE_DEMO_MODE` is `'true'`, reads **"Demo mode — no data is saved"**.
-- `LoginPage` in demo mode renders a "Try Demo" button that navigates directly
-  to `WorkspaceListPage` without triggering the GitHub OAuth redirect.
+- `LoginPage` in demo mode uses a static-password form (Phase 1.4 through 1.6):
+  entering the password `demo` navigates into the app; any other input shows an
+  inline error message. No network call is made — the SPA runs completely
+  without a backend during these phases because it is deployed only to
+  Cloudflare Pages and the Go-embedded HTML templates still serve the real
+  `/login` and `/` routes. In Phase 1.7, when the SPA is embedded in the Go
+  binary, the password form is replaced by a "Try Demo" button that navigates
+  directly to `WorkspaceListPage`.
 
 ### PR Preview Deployments
 
