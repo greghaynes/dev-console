@@ -36,10 +36,10 @@ type TLSConfig struct {
 
 // AuthConfig holds GitHub OAuth and session settings.
 type AuthConfig struct {
-	GitHub              GitHubOAuthConfig `yaml:"github"`
-	AllowedGithubUsers  []string          `yaml:"allowedGithubUsers"`
-	SessionSecret       string            `yaml:"sessionSecret"`
-	SessionTTL          string            `yaml:"sessionTtl"`
+	GitHub             GitHubOAuthConfig `yaml:"github"`
+	AllowedGithubUsers []string          `yaml:"allowedGithubUsers"`
+	SessionSecret      string            `yaml:"sessionSecret"`
+	SessionTTL         string            `yaml:"sessionTtl"`
 }
 
 // SessionTTLDuration parses SessionTTL and returns a time.Duration.

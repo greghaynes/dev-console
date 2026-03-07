@@ -12,7 +12,7 @@ separately where the layout differs significantly.
 The only screen shown to unauthenticated visitors. Keeps the UI minimal and
 directs users immediately to GitHub OAuth.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                         (browser chrome)     │
 ├──────────────────────────────────────────────────────────────────────────────┤
@@ -39,6 +39,7 @@ directs users immediately to GitHub OAuth.
 ```
 
 **Interaction notes:**
+
 - "Sign in with GitHub" button triggers the `/login` redirect to GitHub OAuth.
 - On error (user not in allowlist) a brief inline error message is shown below
   the button.
@@ -49,7 +50,7 @@ directs users immediately to GitHub OAuth.
 
 Shown after successful login when the user has not yet opened a workspace.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Dev Console                                           [ @alice ▾ ] [Logout] │
 ├──────────────────────────────────────────────────────────────────────────────┤
@@ -76,6 +77,7 @@ Shown after successful login when the user has not yet opened a workspace.
 ```
 
 **Interaction notes:**
+
 - Each workspace card is clickable and navigates to the main console for that
   workspace (`/workspaces/:id`).
 - The list is populated via `GET /api/workspaces`.
@@ -87,7 +89,7 @@ Shown after successful login when the user has not yet opened a workspace.
 The primary workspace view on a wide screen. Three-column layout:
 file tree | chat panel | terminal/detail panel.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Dev Console › my-project          [ Chat ] [ Files ] [ Terminal ]  [@alice] │
 ├────────────────┬───────────────────────────────┬─────────────────────────────┤
@@ -123,6 +125,7 @@ file tree | chat panel | terminal/detail panel.
 ```
 
 **Layout notes:**
+
 - 🔴 badge on file tree items indicates a pending (unreviewed) agent change.
 - Top tab bar switches between Chat, Files, and Terminal panel as the
   dominant center pane (terminal moves to the right panel or full-width).
@@ -136,7 +139,7 @@ file tree | chat panel | terminal/detail panel.
 On narrow screens (< 768 px) the three-column layout collapses to a
 single-panel view with a bottom navigation bar.
 
-```
+```text
 ┌──────────────────────────┐
 │ ‹  my-project     [@] ≡  │
 ├──────────────────────────┤
@@ -176,6 +179,7 @@ single-panel view with a bottom navigation bar.
 ```
 
 **Layout notes:**
+
 - Bottom nav bar switches between Chat, Files, and Terminal views.
 - The hamburger `≡` opens a slide-in drawer with workspace list and session
   list.
@@ -187,7 +191,7 @@ single-panel view with a bottom navigation bar.
 When multiple agent sessions exist for a workspace, a session list is shown
 in a collapsible sidebar.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Dev Console › my-project          [ Chat ] [ Files ] [ Terminal ]  [@alice] │
 ├───────────────────┬────────────────────────────────────────────────────────  │
@@ -214,6 +218,7 @@ in a collapsible sidebar.
 ```
 
 **Interaction notes:**
+
 - `● active` = agent is currently processing; shows a typing indicator.
 - `○ idle` = session is idle and can receive new messages.
 - "+ New session" calls `POST /api/workspaces/:id/sessions`.
@@ -225,7 +230,7 @@ in a collapsible sidebar.
 Activated when the user clicks a pending-change badge 🔴 on a file in the
 tree or in the chat panel.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Dev Console › my-project › src/auth.go                            [@alice]  │
 │  ← Back to chat                                      [Accept] [Reject]       │
@@ -256,6 +261,7 @@ tree or in the chat panel.
 ```
 
 **Interaction notes:**
+
 - Side-by-side diff view; on narrow screens falls back to a unified diff.
 - Removed lines highlighted in red (`-`); added lines in green (`+`).
 - "Accept" calls `POST …/changes/:cid/accept`; "Reject" calls
@@ -270,7 +276,7 @@ tree or in the chat panel.
 Activated when the user clicks a file in the tree (no pending change). Shows
 read-only content with syntax highlighting and an "Edit" toggle.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Dev Console › my-project › internal/util.go                       [@alice]  │
 │  ← Back                                                           [ Edit ]   │
@@ -295,7 +301,7 @@ read-only content with syntax highlighting and an "Edit" toggle.
 
 **Edit mode** (after clicking "Edit"):
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Dev Console › my-project › internal/util.go  ✏ EDITING            [@alice]  │
 │  ← Cancel                                                [Save changes]      │
@@ -318,6 +324,7 @@ read-only content with syntax highlighting and an "Edit" toggle.
 ```
 
 **Interaction notes:**
+
 - Read-only view uses `GET /api/workspaces/:id/file?path=` and renders with
   syntax highlighting (library choice TBD per `DESIGN.md` §9.2 — either
   highlight.js or prism.js).
@@ -330,7 +337,7 @@ read-only content with syntax highlighting and an "Edit" toggle.
 
 ## Navigation & Flow Summary
 
-```
+```text
  /login
    │
    └─▶ /workspaces                   (workspace list)
