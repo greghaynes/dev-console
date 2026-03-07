@@ -61,7 +61,8 @@ Pages / endpoints:
 
 - `GET /` — if the session cookie is absent or invalid, redirect to `/login`;
   otherwise render a simple HTML page showing:
-  - The authenticated user's GitHub login and ID (from `/api/whoami`)
+  - The authenticated user's GitHub login and ID (same data as `/api/whoami`,
+    resolved server-side from the session)
   - A "Sign out" form that posts to `/auth/logout`
   - A brief confirmation that the session is valid
 - `GET /login` — renders a page with a "Sign in with GitHub" link pointing to
