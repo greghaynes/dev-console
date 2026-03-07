@@ -7,7 +7,7 @@
 # Deploy:
 #   wrangler deploy                  # builds the site and uploads static assets
 
-name = "dev-console-site"
+name = "dev-console"
 compatibility_date = "2024-09-25"
 
 # Build the Hugo site before deploying.
