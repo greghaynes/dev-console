@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/greghaynes/dev-console/internal/auth"
 	"github.com/greghaynes/dev-console/internal/config"
 )
 
@@ -35,7 +36,7 @@ func run() error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	router := buildRouter()
+	router := buildRouter(cfg)
 
 	srv := &http.Server{
 		Addr:         cfg.Server.ListenAddr,
@@ -83,7 +84,7 @@ func run() error {
 
 // buildRouter constructs the HTTP router with all registered routes.
 // Additional routes will be added as subsequent phases are implemented.
-func buildRouter() *mux.Router {
+func buildRouter(cfg *config.Config) *mux.Router {
 	r := mux.NewRouter()
 
 	// Health-check endpoint (unauthenticated; useful for load balancers).
@@ -91,6 +92,18 @@ func buildRouter() *mux.Router {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "ok")
 	}).Methods(http.MethodGet)
+
+	authHandler := auth.NewHandler(&cfg.Auth)
+
+	// Unauthenticated auth routes.
+	r.HandleFunc("/login", authHandler.LoginHandler).Methods(http.MethodGet)
+	r.HandleFunc("/callback", authHandler.CallbackHandler).Methods(http.MethodGet)
+	r.HandleFunc("/logout", authHandler.LogoutHandler).Methods(http.MethodPost)
+
+	// Protected API routes.
+	api := r.PathPrefix("/api").Subrouter()
+	api.Use(authHandler.RequireAuth)
+	api.HandleFunc("/whoami", auth.WhoAmIHandler).Methods(http.MethodGet)
 
 	return r
 }
