@@ -10,8 +10,9 @@ weight: 10
 Dev Console is an AI-chat-first development environment designed for software
 engineers who want to develop software from mobile devices or thin web clients
 while the heavy lifting runs on self-managed Linux infrastructure. The system
-exposes a **workspace** — a directory containing a software project — and lets
-one or more AI agent sessions act on that workspace through chat. Developers can
+organises work around three nested resources: a **project** (a repository),
+one or more **workspaces** (branch-scoped instances of that project), and
+**agent sessions** that act inside a workspace through chat. Developers can
 review and accept the changes agents propose, browse files, and interact with a
 terminal, all from a lightweight browser or mobile client.
 
@@ -57,9 +58,10 @@ terminal, all from a lightweight browser or mobile client.
 │  ┌─────────────────────────▼─────────────────────────────┐  │
 │  │                    Core Services                       │  │
 │  │  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐   │  │
-│  │  │  Workspace  │  │  Agent Chat  │  │  Terminal   │   │  │
-│  │  │  Manager    │  │  Manager     │  │  Manager    │   │  │
-│  │  └──────┬──────┘  └──────┬───────┘  └──────┬──────┘   │  │
+│  │  │  Project /  │  │  Agent Chat  │  │  Terminal   │   │  │
+│  │  │  Workspace  │  │  Manager     │  │  Manager    │   │  │
+│  │  │  Manager    │  └──────┬───────┘  └──────┬──────┘   │  │
+│  │  └──────┬──────┘         │                 │          │  │
 │  └─────────┼────────────────┼─────────────────┼──────────┘  │
 │            │                │                 │              │
 │  ┌─────────▼────────────────▼─────────────────▼──────────┐  │
@@ -117,20 +119,25 @@ Client                Server                  GitHub
 
 ---
 
-## 5. Workspaces
+## 5. Projects
 
-A **workspace** is a directory on the server's filesystem containing a software
-project. Multiple workspaces can be registered by the operator in the server
-configuration.
+A **project** is the top-level context resource. All work happens within a
+project, and each project corresponds 1:1 with a single Git repository.
+Projects are created dynamically by authenticated users through the UI — users
+select a GitHub repository and the server registers and clones it into a
+configurable local storage directory.
 
 ### 5.1 Data Model
 
 ```text
-Workspace {
-  id:         string          // URL-safe slug, e.g. "my-project"
-  name:       string          // Display name
-  rootPath:   string          // Absolute path on the server
-  createdAt:  timestamp
+Project {
+  id:        string    // URL-safe slug derived from repo name (lowercased,
+                       // non-alphanumeric characters replaced with hyphens);
+                       // a numeric suffix is appended on collision
+  name:      string    // Display name (defaults to repo name)
+  repoURL:   string    // GitHub repository URL, e.g. "https://github.com/owner/repo"
+  rootPath:  string    // Absolute path on the server where the repo is cloned
+  createdAt: timestamp
 }
 ```
 
@@ -138,55 +145,36 @@ Workspace {
 
 | Operation | Description |
 |-----------|-------------|
-| `GET /api/workspaces` | List all registered workspaces. |
-| `GET /api/workspaces/:id` | Get workspace metadata. |
-| `GET /api/workspaces/:id/files?path=` | List directory contents at `path` (relative to workspace root). |
-| `GET /api/workspaces/:id/file?path=` | Read file contents. |
-| `PUT /api/workspaces/:id/file?path=` | Write file contents (manual edit). |
-| `GET /api/workspaces/:id/git/status` | Return `git status` for the workspace. |
-| `GET /api/workspaces/:id/git/diff?path=` | Return unified diff for a path. |
+| `GET /api/projects` | List all projects. |
+| `POST /api/projects` | Create a new project by providing a GitHub repository URL. Server clones the repo into `storage.projectsDir`. |
+| `GET /api/projects/:pid` | Get project metadata. |
+| `DELETE /api/projects/:pid` | Delete a project and its on-disk clone. |
 
-### 5.3 File Browsing
+To support repository selection in the UI, the following GitHub-proxy endpoint
+is also provided:
 
-The client displays a file tree for the workspace root. Directories are
-expanded on demand via `GET /api/workspaces/:id/files?path=<dir>`. File
-contents are fetched and rendered in a read-only viewer with syntax
-highlighting. A separate "edit" mode switches to a minimal text editor.
+| Operation | Description |
+|-----------|-------------|
+| `GET /api/github/repos` | List GitHub repositories accessible to the authenticated user (proxied from the GitHub API using the user's OAuth token). |
 
 ---
 
-## 6. Agent Chat Sessions
+## 6. Workspaces
 
-An **agent session** is a conversation between the user and an AI copilot that
-can read and write files inside the workspace.
+A **workspace** is an instance of a project. Workspaces are 1:1 with a Git
+branch and (optionally) a pull request. A project may have many workspaces
+(e.g. one per feature branch or PR under review).
 
 ### 6.1 Data Model
 
 ```text
-AgentSession {
-  id:          string
-  workspaceId: string
-  title:       string       // Auto-generated from first user message
-  createdAt:   timestamp
-  updatedAt:   timestamp
-  status:      "active" | "idle" | "error"
-}
-
-Message {
-  id:          string
-  sessionId:   string
-  role:        "user" | "assistant" | "tool"
-  content:     string       // Markdown text or tool-call JSON
-  createdAt:   timestamp
-}
-
-PendingChange {
-  id:          string
-  sessionId:   string
-  filePath:    string       // Relative to workspace root
-  diff:        string       // Unified diff
-  status:      "pending" | "accepted" | "rejected"
-  createdAt:   timestamp
+Workspace {
+  id:        string    // URL-safe slug, e.g. "feature-auth"
+  projectId: string    // Parent project
+  name:      string    // Display name (defaults to branch name)
+  branch:    string    // Git branch name
+  prNumber:  int?      // GitHub PR number (null until a PR is opened)
+  createdAt: timestamp
 }
 ```
 
@@ -194,16 +182,76 @@ PendingChange {
 
 | Operation | Description |
 |-----------|-------------|
-| `GET /api/workspaces/:id/sessions` | List agent sessions for a workspace. |
-| `POST /api/workspaces/:id/sessions` | Create a new agent session. |
-| `DELETE /api/workspaces/:id/sessions/:sid` | Close/delete a session. |
-| `GET /api/workspaces/:id/sessions/:sid/messages` | Fetch message history. |
-| `WS /api/workspaces/:id/sessions/:sid/chat` | Bidirectional stream for chat messages and agent events. |
-| `GET /api/workspaces/:id/sessions/:sid/changes` | List pending changes proposed by the agent. |
-| `POST /api/workspaces/:id/sessions/:sid/changes/:cid/accept` | Apply a pending change to the workspace. |
-| `POST /api/workspaces/:id/sessions/:sid/changes/:cid/reject` | Discard a pending change. |
+| `GET /api/projects/:pid/workspaces` | List workspaces for a project. |
+| `POST /api/projects/:pid/workspaces` | Create a new workspace (checks out the branch). |
+| `GET /api/projects/:pid/workspaces/:wid` | Get workspace metadata. |
+| `DELETE /api/projects/:pid/workspaces/:wid` | Delete a workspace. |
+| `GET /api/projects/:pid/workspaces/:wid/files?path=` | List directory contents at `path` (relative to workspace root). |
+| `GET /api/projects/:pid/workspaces/:wid/file?path=` | Read file contents. |
+| `PUT /api/projects/:pid/workspaces/:wid/file?path=` | Write file contents (manual edit). |
+| `GET /api/projects/:pid/workspaces/:wid/git/status` | Return `git status` for the workspace. |
+| `GET /api/projects/:pid/workspaces/:wid/git/diff?path=` | Return unified diff for a path. |
 
-### 6.3 WebSocket Chat Protocol
+### 6.3 File Browsing
+
+The client displays a file tree for the workspace root. Directories are
+expanded on demand via `GET /api/projects/:pid/workspaces/:wid/files?path=<dir>`.
+File contents are fetched and rendered in a read-only viewer with syntax
+highlighting. A separate "edit" mode switches to a minimal text editor.
+
+---
+
+## 7. Agent Chat Sessions
+
+An **agent session** is a conversation between the user and an AI copilot that
+can read and write files inside the workspace. Agent sessions live within a
+workspace; a workspace may have any number of agent sessions.
+
+### 7.1 Data Model
+
+```text
+AgentSession {
+  id:          string
+  workspaceId: string
+  projectId:   string
+  title:       string       // Auto-generated from first user message
+  createdAt:   timestamp
+  updatedAt:   timestamp
+  status:      "active" | "idle" | "error"
+}
+
+Message {
+  id:        string
+  sessionId: string
+  role:      "user" | "assistant" | "tool"
+  content:   string       // Markdown text or tool-call JSON
+  createdAt: timestamp
+}
+
+PendingChange {
+  id:        string
+  sessionId: string
+  filePath:  string       // Relative to workspace root
+  diff:      string       // Unified diff
+  status:    "pending" | "accepted" | "rejected"
+  createdAt: timestamp
+}
+```
+
+### 7.2 Operations
+
+| Operation | Description |
+|-----------|-------------|
+| `GET /api/projects/:pid/workspaces/:wid/sessions` | List agent sessions for a workspace. |
+| `POST /api/projects/:pid/workspaces/:wid/sessions` | Create a new agent session. |
+| `DELETE /api/projects/:pid/workspaces/:wid/sessions/:sid` | Close/delete a session. |
+| `GET /api/projects/:pid/workspaces/:wid/sessions/:sid/messages` | Fetch message history. |
+| `WS /api/projects/:pid/workspaces/:wid/sessions/:sid/chat` | Bidirectional stream for chat messages and agent events. |
+| `GET /api/projects/:pid/workspaces/:wid/sessions/:sid/changes` | List pending changes proposed by the agent. |
+| `POST /api/projects/:pid/workspaces/:wid/sessions/:sid/changes/:cid/accept` | Apply a pending change to the workspace. |
+| `POST /api/projects/:pid/workspaces/:wid/sessions/:sid/changes/:cid/reject` | Discard a pending change. |
+
+### 7.3 WebSocket Chat Protocol
 
 Messages over the WebSocket are JSON-encoded and follow this envelope:
 
@@ -221,7 +269,7 @@ Messages over the WebSocket are JSON-encoded and follow this envelope:
 { "type": "error",            "message": "LLM API quota exceeded" }
 ```
 
-### 6.4 Agent Tool Set
+### 7.4 Agent Tool Set
 
 The agent is given the following tools by the server (function-calling style):
 
@@ -235,19 +283,19 @@ The agent is given the following tools by the server (function-calling style):
 
 ---
 
-## 7. Terminal
+## 8. Terminal
 
 The terminal provides a full PTY session inside the workspace directory.
 
-### 7.1 Operations
+### 8.1 Operations
 
 | Operation | Description |
 |-----------|-------------|
-| `POST /api/workspaces/:id/terminals` | Create a new terminal session; returns `{ terminalId }`. |
-| `DELETE /api/workspaces/:id/terminals/:tid` | Kill the terminal. |
-| `WS /api/workspaces/:id/terminals/:tid` | Attach stdin/stdout/stderr over WebSocket. |
+| `POST /api/projects/:pid/workspaces/:wid/terminals` | Create a new terminal session; returns `{ terminalId }`. |
+| `DELETE /api/projects/:pid/workspaces/:wid/terminals/:tid` | Kill the terminal. |
+| `WS /api/projects/:pid/workspaces/:wid/terminals/:tid` | Attach stdin/stdout/stderr over WebSocket. |
 
-### 7.2 WebSocket Terminal Protocol
+### 8.2 WebSocket Terminal Protocol
 
 Raw PTY bytes are forwarded over the WebSocket. The client sends resize events
 as a JSON message before switching to binary mode:
@@ -261,7 +309,7 @@ as a JSON message before switching to binary mode:
 // Server → Client: stdout/stderr bytes
 ```
 
-### 7.3 Security
+### 8.3 Security
 
 - Each terminal is bound to a single workspace root; the shell is started with
   `cwd` set to the workspace root.
@@ -271,12 +319,12 @@ as a JSON message before switching to binary mode:
 
 ---
 
-## 8. Change Review
+## 9. Change Review
 
 When an agent proposes a file change it is stored as a `PendingChange`. The
 user reviews proposed diffs in the client before they are written to disk.
 
-### 8.1 Review UI Flow
+### 9.1 Review UI Flow
 
 1. After an agent turn completes, the client shows a badge on each changed
    file in the file tree.
@@ -291,9 +339,9 @@ user reviews proposed diffs in the client before they are written to disk.
 
 ---
 
-## 9. Technology Stack
+## 10. Technology Stack
 
-### 9.1 Server
+### 10.1 Server
 
 | Concern | Choice | Rationale |
 |---------|--------|-----------|
@@ -305,7 +353,7 @@ user reviews proposed diffs in the client before they are written to disk.
 | Session store | JWT (`golang-jwt/jwt`) signed with operator secret | Stateless; no database required. |
 | Configuration | YAML file + env variable overrides | Simple operator experience. |
 
-### 9.2 Client
+### 10.2 Client
 
 | Concern | Choice | Rationale |
 |---------|--------|-----------|
@@ -317,7 +365,7 @@ user reviews proposed diffs in the client before they are written to disk.
 | Styling | Tailwind CSS | Responsive by default; small bundle. |
 | State management | React Query + Zustand | Server state + local UI state. |
 
-### 9.3 Deployment
+### 10.3 Deployment
 
 The operator runs a single `dev-console` binary and a short configuration file:
 
@@ -350,10 +398,8 @@ llm:
     - "make"
     - "git"
 
-workspaces:
-  - id:       "my-project"
-    name:     "My Project"
-    rootPath: "/srv/workspaces/my-project"
+storage:
+  projectsDir: "/srv/projects"   # root directory where project repos are cloned
 ```
 
 The compiled client SPA is embedded in the server binary using Go's `embed`
@@ -361,14 +407,14 @@ package so no separate static file server is needed.
 
 ---
 
-## 10. Security Considerations
+## 11. Security Considerations
 
 | Threat | Mitigation |
 |--------|------------|
 | Unauthorized access | GitHub OAuth + allowlist of GitHub user IDs. All API routes require a valid session. |
 | Session hijacking | HTTP-only, Secure, SameSite=Strict cookies; short TTL with refresh. |
 | Path traversal in file API | All file paths are resolved against the workspace root and rejected if the resolved path escapes it. |
-| Arbitrary command execution via terminal | Terminal access is behind authentication; the operator controls which workspaces and shells are allowed. |
+| Arbitrary command execution via terminal | Terminal access is behind authentication; the operator controls which projects, workspaces, and shells are allowed. |
 | Agent-triggered command execution | `run_command` tool is restricted to an operator-configured allowlist; commands run in a sandboxed subprocess with the workspace as the working directory. |
 | LLM prompt injection | Agent tool outputs are escaped before being re-injected into the context; file content passed to the LLM is clearly delimited. |
 | TLS | The server is expected to terminate TLS directly (cert/key configurable) or be placed behind a TLS-terminating reverse proxy. |
@@ -376,7 +422,7 @@ package so no separate static file server is needed.
 
 ---
 
-## 11. Open Questions / Future Work
+## 12. Open Questions / Future Work
 
 - **Multi-user collaboration**: Should multiple users be able to share a
   workspace and see each other's agent sessions? (Deferred to v2.)

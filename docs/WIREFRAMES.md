@@ -51,31 +51,114 @@ directs users immediately to GitHub OAuth.
 
 ---
 
-## Screen 2 — Workspace Selection
+## Screen 2 — Project Selection
 
-Shown after successful login when the user has not yet opened a workspace.
+Shown after successful login. Lists existing projects and allows creating new
+ones by selecting a GitHub repository.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Dev Console                                           [ @alice ▾ ] [Logout] │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│   Workspaces                                                                 │
+│   Projects                                            [ + New Project ]     │
 │   ──────────────────────────────────────────────────────────────────────    │
 │                                                                              │
 │   ┌──────────────────────────────────────────────────────────────────────┐  │
 │   │  my-project                                           Last used: 2h  │  │
-│   │  /srv/workspaces/my-project                                      [›] │  │
+│   │  github.com/myorg/my-project                                     [›] │  │
 │   └──────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
 │   ┌──────────────────────────────────────────────────────────────────────┐  │
 │   │  backend-api                                          Last used: 1d  │  │
-│   │  /srv/workspaces/backend-api                                     [›] │  │
+│   │  github.com/myorg/backend-api                                    [›] │  │
 │   └──────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
 │   ┌──────────────────────────────────────────────────────────────────────┐  │
-│   │  frontend-app                                        Last used: 3d  │  │
-│   │  /srv/workspaces/frontend-app                                    [›] │  │
+│   │  frontend-app                                         Last used: 3d  │  │
+│   │  github.com/myorg/frontend-app                                   [›] │  │
+│   └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Interaction notes:**
+
+- Each project card is clickable and navigates to the workspace list for that
+  project (`/projects/:pid/workspaces`).
+- The list is populated via `GET /api/projects`.
+- "+ New Project" opens the repository-picker dialog (Screen 2a).
+
+---
+
+## Screen 2a — New Project Dialog (Repository Picker)
+
+Opened by clicking "+ New Project" on Screen 2. The UI lists the authenticated
+user's GitHub repositories (from `GET /api/github/repos`) and lets the user
+select one to create a project.
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Dev Console                                           [ @alice ▾ ] [Logout] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Projects                                            [ + New Project ]     │
+│   ──────────────────────────────────────────────────────────────────────    │
+│                                                                              │
+│   ┌──────────────────────────────────────────────────────────────────────┐  │
+│   │  ✕   Add Project                                                     │  │
+│   │  ─────────────────────────────────────────────────────────────────   │  │
+│   │                                                                      │  │
+│   │  Select a repository                                                 │  │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │  │
+│   │  │ 🔍 Filter repositories…                                      │   │  │
+│   │  └──────────────────────────────────────────────────────────────┘   │  │
+│   │                                                                      │  │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │  │
+│   │  │ ○  myorg/my-project          Go · Updated 2h ago             │   │  │
+│   │  │ ○  myorg/backend-api         Go · Updated 1d ago             │   │  │
+│   │  │ ○  myorg/frontend-app        TypeScript · Updated 3d ago     │   │  │
+│   │  │ ○  myorg/docs                Markdown · Updated 1w ago       │   │  │
+│   │  └──────────────────────────────────────────────────────────────┘   │  │
+│   │                                                                      │  │
+│   │                                    [Cancel]  [Add Project ›]        │  │
+│   └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Interaction notes:**
+
+- Repository list is loaded via `GET /api/github/repos`.
+- The filter input narrows the list client-side.
+- Selecting a repository and clicking "Add Project ›" calls
+  `POST /api/projects` with `{ "repoURL": "https://github.com/…" }`.
+- The server clones the repository into `storage.projectsDir` and returns the
+  new project. The dialog closes and the project list updates.
+
+---
+
+## Screen 2b — Workspace Selection
+
+Shown after selecting a project. Lists workspaces (branch instances) and allows
+creating a new one.
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Dev Console › my-project                             [ @alice ▾ ] [Logout] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Workspaces                                          [ + New Workspace ]   │
+│   ──────────────────────────────────────────────────────────────────────    │
+│                                                                              │
+│   ┌──────────────────────────────────────────────────────────────────────┐  │
+│   │  main  (branch: main)                                 Last used: 2h  │  │
+│   │  No PR                                                           [›] │  │
+│   └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│   ┌──────────────────────────────────────────────────────────────────────┐  │
+│   │  feature-auth  (branch: feature/auth)                 Last used: 1d  │  │
+│   │  PR #42: Add JWT authentication                                  [›] │  │
 │   └──────────────────────────────────────────────────────────────────────┘  │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -84,8 +167,10 @@ Shown after successful login when the user has not yet opened a workspace.
 **Interaction notes:**
 
 - Each workspace card is clickable and navigates to the main console for that
-  workspace (`/workspaces/:id`).
-- The list is populated via `GET /api/workspaces`.
+  workspace (`/projects/:pid/workspaces/:wid`).
+- The list is populated via `GET /api/projects/:pid/workspaces`.
+- "+ New Workspace" opens a dialog to enter a branch name; calls
+  `POST /api/projects/:pid/workspaces`.
 
 ---
 
@@ -186,8 +271,8 @@ single-panel view with a bottom navigation bar.
 **Layout notes:**
 
 - Bottom nav bar switches between Chat, Files, and Terminal views.
-- The hamburger `≡` opens a slide-in drawer with workspace list and session
-  list.
+- The hamburger `≡` opens a slide-in drawer with project list, workspace list,
+  and session list.
 
 ---
 
@@ -226,7 +311,7 @@ in a collapsible sidebar.
 
 - `● active` = agent is currently processing; shows a typing indicator.
 - `○ idle` = session is idle and can receive new messages.
-- "+ New session" calls `POST /api/workspaces/:id/sessions`.
+- "+ New session" calls `POST /api/projects/:pid/workspaces/:wid/sessions`.
 
 ---
 
@@ -330,13 +415,13 @@ read-only content with syntax highlighting and an "Edit" toggle.
 
 **Interaction notes:**
 
-- Read-only view uses `GET /api/workspaces/:id/file?path=` and renders with
-  syntax highlighting (library choice TBD per `DESIGN.md` §9.2 — either
-  highlight.js or prism.js).
+- Read-only view uses `GET /api/projects/:pid/workspaces/:wid/file?path=` and
+  renders with syntax highlighting (library choice TBD per `DESIGN.md` §10.2 —
+  either highlight.js or prism.js).
 - "Edit" switches to a minimal textarea / code editor (plain `<textarea>` for
   v1; no language-server features per the Non-Goals in `DESIGN.md`).
-- "Save changes" calls `PUT /api/workspaces/:id/file?path=` with the new
-  content; on success returns to read-only view.
+- "Save changes" calls `PUT /api/projects/:pid/workspaces/:wid/file?path=` with
+  the new content; on success returns to read-only view.
 
 ---
 
@@ -345,19 +430,23 @@ read-only content with syntax highlighting and an "Edit" toggle.
 ```text
  /login
    │
-   └─▶ /workspaces                   (workspace list)
+   └─▶ /projects                  (project list)
          │
-         └─▶ /workspaces/:id          (main console)
+         └─▶ /projects/:pid/workspaces
+                                  (workspace list for project)
                │
-               ├─▶ Chat panel         (default view)
-               │     │
-               │     └─▶ /workspaces/:id/sessions/:sid/changes/:cid
-               │                      (diff review)
-               │
-               ├─▶ Files panel
-               │     │
-               │     └─▶ /workspaces/:id/files/:path
-               │                      (file viewer / editor)
-               │
-               └─▶ Terminal panel     (embedded xterm.js)
+               └─▶ /projects/:pid/workspaces/:wid
+                                  (main console)
+                     │
+                     ├─▶ Chat panel         (default view)
+                     │     │
+                     │     └─▶ /projects/:pid/workspaces/:wid/sessions/:sid/changes/:cid
+                     │                      (diff review)
+                     │
+                     ├─▶ Files panel
+                     │     │
+                     │     └─▶ /projects/:pid/workspaces/:wid/files/:path
+                     │                      (file viewer / editor)
+                     │
+                     └─▶ Terminal panel     (embedded xterm.js)
 ```
