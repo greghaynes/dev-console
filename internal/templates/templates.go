@@ -38,9 +38,11 @@ func RenderIndex(w http.ResponseWriter, data IndexData) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// WriteTo error is intentionally ignored: at this point headers are sent
-	// and there is nothing meaningful to do if the client disconnects mid-write.
-	_, _ = buf.WriteTo(w)
+	// Headers are already sent; log any write error (e.g. broken pipe) for
+	// observability but do not attempt to send another response.
+	if _, err := buf.WriteTo(w); err != nil {
+		log.Printf("templates: writing index page response: %v", err)
+	}
 }
 
 // RenderLogin writes the login page to w.
@@ -52,7 +54,9 @@ func RenderLogin(w http.ResponseWriter) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// WriteTo error is intentionally ignored: at this point headers are sent
-	// and there is nothing meaningful to do if the client disconnects mid-write.
-	_, _ = buf.WriteTo(w)
+	// Headers are already sent; log any write error (e.g. broken pipe) for
+	// observability but do not attempt to send another response.
+	if _, err := buf.WriteTo(w); err != nil {
+		log.Printf("templates: writing login page response: %v", err)
+	}
 }
