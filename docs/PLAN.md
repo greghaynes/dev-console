@@ -182,32 +182,125 @@ guard in `make site-build-with-demo` is a no-op and only the Hugo docs are deplo
 
 ### 1.5 Project and Workspace Registration
 
-- `internal/project/` package — `Project` struct, in-memory store; projects are
-  created at runtime via the API (not from config)
-- `internal/workspace/` package — `Workspace` struct, in-memory store keyed by
-  project; workspaces are created at runtime (not from config)
-- `GET /api/projects` — returns the list of projects (id, name, repoURL)
-- `POST /api/projects` — creates a new project from a GitHub repository URL;
-  server clones the repo into `storage.projectsDir/<id>`; returns 400 if
-  `repoURL` is missing or malformed, 502 if the clone fails (network error,
-  invalid credentials, or repo not found)
-- `GET /api/projects/:pid` — returns metadata for a single project; 404 if
-  unknown
-- `DELETE /api/projects/:pid` — removes a project and all its workspaces
-  (cascade delete) and deletes the on-disk clone; 404 if unknown
-- `GET /api/github/repos` — proxies the GitHub API to list repos accessible to
-  the authenticated user; used by the "Add Project" UI to populate a repo picker
-- `GET /api/projects/:pid/workspaces` — returns the list of workspaces for a
-  project
-- `POST /api/projects/:pid/workspaces` — creates a new workspace (branch,
-  optional prNumber); 404 if project unknown
-- `GET /api/projects/:pid/workspaces/:wid` — returns workspace metadata; 404 if
-  unknown
+**Data models** (as specified in `DESIGN.md §5.1` and `§6.1`):
 
-**Acceptance:** `POST /api/projects` with `{ "repoURL": "…" }` creates a project
-and `GET /api/projects` returns it. `GET /api/github/repos` returns a list of
-repos for the authenticated user. `POST /api/projects/:pid/workspaces` creates a
-workspace and `GET /api/projects/:pid/workspaces` lists it.
+```go
+// internal/project/project.go
+type Project struct {
+    ID        string    `json:"id"`        // URL-safe slug (see ID generation below)
+    Name      string    `json:"name"`      // Display name; defaults to the repo name portion of the URL
+    RepoURL   string    `json:"repoURL"`   // HTTPS GitHub clone URL, e.g. "https://github.com/owner/repo"
+    RootPath  string    `json:"-"`         // Absolute path: filepath.Join(storage.projectsDir, id); omitted from JSON
+    CreatedAt time.Time `json:"createdAt"`
+}
+
+// internal/workspace/workspace.go
+type Workspace struct {
+    ID        string    `json:"id"`        // URL-safe slug (see ID generation below)
+    ProjectID string    `json:"projectId"` // Parent project ID
+    Name      string    `json:"name"`      // Display name; defaults to the branch name
+    Branch    string    `json:"branch"`    // Git branch name
+    PRNumber  *int      `json:"prNumber"`  // GitHub PR number; nil/JSON null means no PR is associated yet
+    CreatedAt time.Time `json:"createdAt"`
+}
+```
+
+**ID generation** (`internal/slug` package, `func Generate(input string, exists func(string) bool) string`):
+
+- Extract the final path segment from the repo URL (or use the branch name as-is
+  for workspaces).
+- Lowercase the string; replace every run of non-alphanumeric characters with a
+  single hyphen; trim leading/trailing hyphens.
+- If the resulting slug is already taken (as determined by the `exists` callback),
+  append `-2`, `-3`, etc. until a free slot is found.
+
+**`internal/project/` package:**
+
+- `Project` struct and `Manager` (thread-safe in-memory registry, `sync.RWMutex`; the
+  corresponding on-disk artifact is the cloned git repository under `RootPath`)
+- `Manager.Create(repoURL string) (*Project, error)` — generates the ID and
+  name from the URL, sets `RootPath`, clones the repo, registers the record in
+  memory
+- `Manager.List() []*Project`, `Manager.Get(id) (*Project, error)`,
+  `Manager.Delete(id) error` — standard CRUD; `Delete` cascades to workspaces
+  and removes `RootPath` from disk
+
+**`internal/workspace/` package:**
+
+- `Workspace` struct and `Manager` (thread-safe in-memory registry scoped per
+  project; the on-disk artifact is the git worktree under `RootPath/worktrees/<wid>/`)
+- **Filesystem layout:** each workspace is a
+  [git worktree](https://git-scm.com/docs/git-worktree) created at
+  `<project.RootPath>/worktrees/<wid>/` via
+  `git worktree add <path> <branch>`. This lets multiple workspaces check out
+  different branches simultaneously without conflicts. The workspace root used
+  by all file I/O and terminal sessions is this worktree path.
+- `Manager.Create(projectID, branch, name string, prNumber *int) (*Workspace, error)`
+  — generates the ID, runs `git worktree add`, registers the record in memory;
+  returns an error (surfaced as 502) if the branch or worktree creation fails
+- `Manager.List(projectID) []*Workspace`,
+  `Manager.Get(projectID, id) (*Workspace, error)`,
+  `Manager.Delete(projectID, id) error` — standard CRUD; `Delete` runs
+  `git worktree remove` before removing the in-memory record
+
+**REST endpoints** (all behind `RequireAuth`):
+
+- `GET /api/projects` — returns the list of all projects;
+  each item: `{ id, name, repoURL, createdAt }`
+- `POST /api/projects` — request body: `{ "repoURL": "https://github.com/owner/repo" }`;
+  creates the project record and clones the repo; response: full `Project`
+  JSON (`id`, `name`, `repoURL`, `createdAt`; `rootPath` is intentionally
+  omitted from API responses as a server-internal detail); 400 if `repoURL` is
+  absent or not a valid GitHub HTTPS URL; 502 if the clone fails
+- `GET /api/projects/:pid` — returns full project metadata (same shape as list
+  item); 404 if unknown
+- `DELETE /api/projects/:pid` — cascades: removes all workspaces (runs
+  `git worktree remove` for each), deletes the on-disk clone, removes the
+  project record; returns 204 on success; 404 if unknown
+- `GET /api/github/repos` — fetches from `GET https://api.github.com/user/repos`
+  (with `?per_page=100&sort=updated`) using the authenticated user's GitHub
+  OAuth token stored in the session; returns a normalized array where each item
+  maps GitHub's `id`, `full_name`, `description`, `language`, `updated_at`, and
+  `html_url` fields to `{ id, fullName, description, language, updatedAt, htmlURL }`;
+  used by the repo-picker dialog (Screen 2a in `WIREFRAMES.md`); 502 if the
+  GitHub API request fails
+- `GET /api/projects/:pid/workspaces` — returns the list of workspaces for the
+  project; each item: `{ id, projectId, name, branch, prNumber, createdAt }`; 404 if
+  project unknown
+- `POST /api/projects/:pid/workspaces` — request body:
+  `{ "branch": "feature/my-feature", "name": "My Feature", "prNumber": null }`;
+  `name` defaults to the branch name when omitted; `prNumber` defaults to `null`;
+  creates the workspace record and the git worktree; response: full `Workspace`
+  JSON (`id`, `projectId`, `name`, `branch`, `prNumber`, `createdAt`); 400 if `branch` is
+  absent; 404 if the project is unknown; 502 if `git worktree add` fails
+- `GET /api/projects/:pid/workspaces/:wid` — returns full workspace metadata
+  (same shape as list item, including `projectId`); 404 if project or workspace unknown
+- `DELETE /api/projects/:pid/workspaces/:wid` — runs `git worktree remove`,
+  removes the workspace record; returns 204 on success; 404 if unknown
+
+**Acceptance:**
+
+1. `POST /api/projects` with `{ "repoURL": "https://github.com/owner/repo" }`
+   returns a project object with a generated `id` and `name`; a subsequent
+   `GET /api/projects` response includes it; `GET /api/projects/:pid` returns
+   its full metadata.
+2. `DELETE /api/projects/:pid` returns 204; a subsequent `GET /api/projects/:pid`
+   returns 404; the directory at `storage.projectsDir/<id>` no longer exists.
+3. `POST /api/projects` with a missing or malformed `repoURL` returns 400; a
+   valid URL pointing to a non-existent or inaccessible repo returns 502.
+4. `GET /api/github/repos` returns a JSON array of repository objects for the
+   authenticated user.
+5. `POST /api/projects/:pid/workspaces` with `{ "branch": "main" }` returns a
+   workspace object; a subsequent `GET /api/projects/:pid/workspaces` includes
+   it; `GET /api/projects/:pid/workspaces/:wid` returns its metadata; a git
+   worktree exists on disk at the expected path.
+6. `DELETE /api/projects/:pid/workspaces/:wid` returns 204; a subsequent
+   `GET /api/projects/:pid/workspaces/:wid` returns 404; the worktree directory
+   no longer exists.
+7. `DELETE /api/projects/:pid` also removes all of the project's workspaces and
+   their worktrees.
+8. `POST /api/projects/:pid/workspaces` with a missing `branch` returns 400;
+   an unknown `:pid` returns 404.
 
 ### 1.6 Terminal Backend
 
@@ -266,11 +359,14 @@ pattern.
   - `POST /api/projects` → creates a new project stub from the supplied
     `repoURL`; returns it as JSON
   - `GET /api/projects/:pid` → metadata for the matching project
+  - `DELETE /api/projects/:pid` → 204 success stub; removes the project from
+    the in-demo-memory list so the UI refreshes correctly
   - `GET /api/github/repos` → a short hard-coded list of GitHub repository
     stubs (used by the repo-picker dialog)
   - `GET /api/projects/:pid/workspaces` → one pre-seeded workspace per project
     (`main` branch)
   - `POST /api/projects/:pid/workspaces` → returns a new workspace stub
+  - `DELETE /api/projects/:pid/workspaces/:wid` → 204 success stub
   - WebSocket `WS /api/projects/:pid/workspaces/:wid/terminals/:tid` →
     in-process echo handler that prints a welcome banner and echoes input; no
     system processes are spawned
@@ -306,7 +402,8 @@ phase's changes will automatically trigger a preview.
 | `internal/auth/` | GitHub OAuth + session middleware |
 | `internal/templates/` | `html/template` files (embedded via `go:embed`) for the auth validation site |
 | `internal/project/` | Project registry |
-| `internal/workspace/` | Workspace store (in-memory, created at runtime) |
+| `internal/workspace/` | Workspace store with git worktree management (in-memory, created at runtime) |
+| `internal/slug/` | URL-safe slug generation helper used by project and workspace managers |
 | `internal/terminal/` | PTY session management |
 | `client/` | Vite + React + TypeScript SPA (bootstrapped in Phase 1.4) |
 | `client/src/mocks/` | MSW handlers and browser/server worker entry points (created in Phase 1.4) |

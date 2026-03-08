@@ -136,7 +136,8 @@ Project {
                        // a numeric suffix is appended on collision
   name:      string    // Display name (defaults to repo name)
   repoURL:   string    // GitHub repository URL, e.g. "https://github.com/owner/repo"
-  rootPath:  string    // Absolute path on the server where the repo is cloned
+  rootPath:  string    // Absolute path on the server where the repo is cloned;
+                       // server-internal — intentionally omitted from all API responses
   createdAt: timestamp
 }
 ```
