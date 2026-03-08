@@ -216,30 +216,32 @@ type Workspace struct {
 
 **`internal/project/` package:**
 
-- `Project` struct and `Manager` (thread-safe in-memory store, `sync.RWMutex`)
+- `Project` struct and `Manager` (thread-safe in-memory registry, `sync.RWMutex`; the
+  corresponding on-disk artifact is the cloned git repository under `RootPath`)
 - `Manager.Create(repoURL string) (*Project, error)` — generates the ID and
-  name from the URL, sets `RootPath`, clones the repo, persists the record
+  name from the URL, sets `RootPath`, clones the repo, registers the record in
+  memory
 - `Manager.List() []*Project`, `Manager.Get(id) (*Project, error)`,
   `Manager.Delete(id) error` — standard CRUD; `Delete` cascades to workspaces
   and removes `RootPath` from disk
 
 **`internal/workspace/` package:**
 
-- `Workspace` struct and `Manager` (thread-safe in-memory store scoped per
-  project)
+- `Workspace` struct and `Manager` (thread-safe in-memory registry scoped per
+  project; the on-disk artifact is the git worktree under `RootPath/worktrees/<wid>/`)
 - **Filesystem layout:** each workspace is a
   [git worktree](https://git-scm.com/docs/git-worktree) created at
   `<project.RootPath>/worktrees/<wid>/` via
   `git worktree add <path> <branch>`. This lets multiple workspaces check out
   different branches simultaneously without conflicts. The workspace root used
   by all file I/O and terminal sessions is this worktree path.
-- `Manager.Create(projectID, branch, name string, prNumber int) (*Workspace, error)`
-  — generates the ID, runs `git worktree add`, persists the record; returns an
-  error (surfaced as 502) if the branch or worktree creation fails
+- `Manager.Create(projectID, branch, name string, prNumber *int) (*Workspace, error)`
+  — generates the ID, runs `git worktree add`, registers the record in memory;
+  returns an error (surfaced as 502) if the branch or worktree creation fails
 - `Manager.List(projectID) []*Workspace`,
   `Manager.Get(projectID, id) (*Workspace, error)`,
   `Manager.Delete(projectID, id) error` — standard CRUD; `Delete` runs
-  `git worktree remove` before removing the record
+  `git worktree remove` before removing the in-memory record
 
 **REST endpoints** (all behind `RequireAuth`):
 
@@ -255,18 +257,19 @@ type Workspace struct {
 - `DELETE /api/projects/:pid` — cascades: removes all workspaces (runs
   `git worktree remove` for each), deletes the on-disk clone, removes the
   project record; returns 204 on success; 404 if unknown
-- `GET /api/github/repos` — proxies `GET https://api.github.com/user/repos`
+- `GET /api/github/repos` — fetches from `GET https://api.github.com/user/repos`
   (with `?per_page=100&sort=updated`) using the authenticated user's GitHub
-  OAuth token stored in the session; returns an array of
-  `{ id, fullName, description, language, updatedAt, htmlURL }` objects;
+  OAuth token stored in the session; returns a normalized array where each item
+  maps GitHub's `id`, `full_name`, `description`, `language`, `updated_at`, and
+  `html_url` fields to `{ id, fullName, description, language, updatedAt, htmlURL }`;
   used by the repo-picker dialog (Screen 2a in `WIREFRAMES.md`); 502 if the
   GitHub API request fails
 - `GET /api/projects/:pid/workspaces` — returns the list of workspaces for the
   project; each item: `{ id, projectId, name, branch, prNumber, createdAt }`; 404 if
   project unknown
 - `POST /api/projects/:pid/workspaces` — request body:
-  `{ "branch": "feature/my-feature", "name": "My Feature", "prNumber": 0 }`;
-  `name` defaults to the branch name when omitted; `prNumber` defaults to 0;
+  `{ "branch": "feature/my-feature", "name": "My Feature", "prNumber": null }`;
+  `name` defaults to the branch name when omitted; `prNumber` defaults to `null`;
   creates the workspace record and the git worktree; response: full `Workspace`
   JSON (`id`, `projectId`, `name`, `branch`, `prNumber`, `createdAt`); 400 if `branch` is
   absent; 404 if the project is unknown; 502 if `git worktree add` fails
