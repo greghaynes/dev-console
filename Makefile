@@ -36,7 +36,7 @@ site-build:
 
 # Build the documentation site together with the frontend demo (if client/ exists).
 # This is the Cloudflare Workers build command (used in wrangler.toml).
-# Requires Node.js 22+ in the build environment (set NODE_VERSION=22 in CF project settings).
+# Requires Node.js 22+ in the environment running this build (local machine or CI; e.g., set NODE_VERSION=22 in your CI/job env).
 site-build-with-demo:
 	@if [ -d "client" ] && [ -f "client/package.json" ]; then \
 		set -e; \
