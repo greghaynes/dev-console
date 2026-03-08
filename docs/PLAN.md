@@ -182,14 +182,21 @@ guard in `make site-build-with-demo` is a no-op and only the Hugo docs are deplo
 
 ### 1.5 Project and Workspace Registration
 
-- `internal/project/` package — `Project` struct, in-memory registry loaded
-  from config
+- `internal/project/` package — `Project` struct, in-memory store; projects are
+  created at runtime via the API (not from config)
 - `internal/workspace/` package — `Workspace` struct, in-memory store keyed by
   project; workspaces are created at runtime (not from config)
-- `GET /api/projects` — returns the list of registered projects (id, name,
-  repoURL)
+- `GET /api/projects` — returns the list of projects (id, name, repoURL)
+- `POST /api/projects` — creates a new project from a GitHub repository URL;
+  server clones the repo into `storage.projectsDir/<id>`; returns 400 if
+  `repoURL` is missing or malformed, 502 if the clone fails (network error,
+  invalid credentials, or repo not found)
 - `GET /api/projects/:pid` — returns metadata for a single project; 404 if
   unknown
+- `DELETE /api/projects/:pid` — removes a project and all its workspaces
+  (cascade delete) and deletes the on-disk clone; 404 if unknown
+- `GET /api/github/repos` — proxies the GitHub API to list repos accessible to
+  the authenticated user; used by the "Add Project" UI to populate a repo picker
 - `GET /api/projects/:pid/workspaces` — returns the list of workspaces for a
   project
 - `POST /api/projects/:pid/workspaces` — creates a new workspace (branch,
@@ -197,9 +204,10 @@ guard in `make site-build-with-demo` is a no-op and only the Hugo docs are deplo
 - `GET /api/projects/:pid/workspaces/:wid` — returns workspace metadata; 404 if
   unknown
 
-**Acceptance:** Config lists one project; `curl /api/projects` returns it as
-JSON. `POST /api/projects/:pid/workspaces` creates a workspace and
-`GET /api/projects/:pid/workspaces` lists it.
+**Acceptance:** `POST /api/projects` with `{ "repoURL": "…" }` creates a project
+and `GET /api/projects` returns it. `GET /api/github/repos` returns a list of
+repos for the authenticated user. `POST /api/projects/:pid/workspaces` creates a
+workspace and `GET /api/projects/:pid/workspaces` lists it.
 
 ### 1.6 Terminal Backend
 
@@ -226,8 +234,10 @@ A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
 
 - `LoginPage` — shows a "Sign in with GitHub" button; shown when the user has no
   valid session
-- `ProjectListPage` — lists available projects; fetched from
-  `GET /api/projects`
+- `ProjectListPage` — lists available projects (fetched from `GET /api/projects`)
+  and provides a **"+ New Project"** button that opens a repository-picker dialog:
+  the dialog calls `GET /api/github/repos` to list the user's GitHub repos, lets
+  the user select one, and calls `POST /api/projects` to register and clone it
 - `WorkspaceListPage` — lists workspaces for a selected project; fetched from
   `GET /api/projects/:pid/workspaces`; includes a button to create a new
   workspace
@@ -253,7 +263,11 @@ pattern.
 
 - Add to `src/mocks/handlers.ts`:
   - `GET /api/projects` → two hard-coded projects (`demo-web`, `demo-api`)
+  - `POST /api/projects` → creates a new project stub from the supplied
+    `repoURL`; returns it as JSON
   - `GET /api/projects/:pid` → metadata for the matching project
+  - `GET /api/github/repos` → a short hard-coded list of GitHub repository
+    stubs (used by the repo-picker dialog)
   - `GET /api/projects/:pid/workspaces` → one pre-seeded workspace per project
     (`main` branch)
   - `POST /api/projects/:pid/workspaces` → returns a new workspace stub

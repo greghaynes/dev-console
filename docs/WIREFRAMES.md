@@ -53,14 +53,15 @@ directs users immediately to GitHub OAuth.
 
 ## Screen 2 — Project Selection
 
-Shown after successful login when the user has not yet opened a project.
+Shown after successful login. Lists existing projects and allows creating new
+ones by selecting a GitHub repository.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Dev Console                                           [ @alice ▾ ] [Logout] │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│   Projects                                                                   │
+│   Projects                                            [ + New Project ]     │
 │   ──────────────────────────────────────────────────────────────────────    │
 │                                                                              │
 │   ┌──────────────────────────────────────────────────────────────────────┐  │
@@ -86,6 +87,54 @@ Shown after successful login when the user has not yet opened a project.
 - Each project card is clickable and navigates to the workspace list for that
   project (`/projects/:pid/workspaces`).
 - The list is populated via `GET /api/projects`.
+- "+ New Project" opens the repository-picker dialog (Screen 2a).
+
+---
+
+## Screen 2a — New Project Dialog (Repository Picker)
+
+Opened by clicking "+ New Project" on Screen 2. The UI lists the authenticated
+user's GitHub repositories (from `GET /api/github/repos`) and lets the user
+select one to create a project.
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Dev Console                                           [ @alice ▾ ] [Logout] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Projects                                            [ + New Project ]     │
+│   ──────────────────────────────────────────────────────────────────────    │
+│                                                                              │
+│   ┌──────────────────────────────────────────────────────────────────────┐  │
+│   │  ✕   Add Project                                                     │  │
+│   │  ─────────────────────────────────────────────────────────────────   │  │
+│   │                                                                      │  │
+│   │  Select a repository                                                 │  │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │  │
+│   │  │ 🔍 Filter repositories…                                      │   │  │
+│   │  └──────────────────────────────────────────────────────────────┘   │  │
+│   │                                                                      │  │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │  │
+│   │  │ ○  myorg/my-project          Go · Updated 2h ago             │   │  │
+│   │  │ ○  myorg/backend-api         Go · Updated 1d ago             │   │  │
+│   │  │ ○  myorg/frontend-app        TypeScript · Updated 3d ago     │   │  │
+│   │  │ ○  myorg/docs                Markdown · Updated 1w ago       │   │  │
+│   │  └──────────────────────────────────────────────────────────────┘   │  │
+│   │                                                                      │  │
+│   │                                    [Cancel]  [Add Project ›]        │  │
+│   └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Interaction notes:**
+
+- Repository list is loaded via `GET /api/github/repos`.
+- The filter input narrows the list client-side.
+- Selecting a repository and clicking "Add Project ›" calls
+  `POST /api/projects` with `{ "repoURL": "https://github.com/…" }`.
+- The server clones the repository into `storage.projectsDir` and returns the
+  new project. The dialog closes and the project list updates.
 
 ---
 

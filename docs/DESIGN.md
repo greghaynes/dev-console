@@ -123,16 +123,20 @@ Client                Server                  GitHub
 
 A **project** is the top-level context resource. All work happens within a
 project, and each project corresponds 1:1 with a single Git repository.
-Projects are registered by the operator in the server configuration.
+Projects are created dynamically by authenticated users through the UI — users
+select a GitHub repository and the server registers and clones it into a
+configurable local storage directory.
 
 ### 5.1 Data Model
 
 ```text
 Project {
-  id:        string    // URL-safe slug, e.g. "my-project"
-  name:      string    // Display name
+  id:        string    // URL-safe slug derived from repo name (lowercased,
+                       // non-alphanumeric characters replaced with hyphens);
+                       // a numeric suffix is appended on collision
+  name:      string    // Display name (defaults to repo name)
   repoURL:   string    // GitHub repository URL, e.g. "https://github.com/owner/repo"
-  rootPath:  string    // Absolute path on the server where the repo is checked out
+  rootPath:  string    // Absolute path on the server where the repo is cloned
   createdAt: timestamp
 }
 ```
@@ -141,8 +145,17 @@ Project {
 
 | Operation | Description |
 |-----------|-------------|
-| `GET /api/projects` | List all registered projects. |
+| `GET /api/projects` | List all projects. |
+| `POST /api/projects` | Create a new project by providing a GitHub repository URL. Server clones the repo into `storage.projectsDir`. |
 | `GET /api/projects/:pid` | Get project metadata. |
+| `DELETE /api/projects/:pid` | Delete a project and its on-disk clone. |
+
+To support repository selection in the UI, the following GitHub-proxy endpoint
+is also provided:
+
+| Operation | Description |
+|-----------|-------------|
+| `GET /api/github/repos` | List GitHub repositories accessible to the authenticated user (proxied from the GitHub API using the user's OAuth token). |
 
 ---
 
@@ -385,11 +398,8 @@ llm:
     - "make"
     - "git"
 
-projects:
-  - id:       "my-project"
-    name:     "My Project"
-    repoURL:  "https://github.com/myorg/my-project"
-    rootPath: "/srv/projects/my-project"
+storage:
+  projectsDir: "/srv/projects"   # root directory where project repos are cloned
 ```
 
 The compiled client SPA is embedded in the server binary using Go's `embed`
