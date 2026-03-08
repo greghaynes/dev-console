@@ -262,16 +262,16 @@ type Workspace struct {
   used by the repo-picker dialog (Screen 2a in `WIREFRAMES.md`); 502 if the
   GitHub API request fails
 - `GET /api/projects/:pid/workspaces` — returns the list of workspaces for the
-  project; each item: `{ id, name, branch, prNumber, createdAt }`; 404 if
+  project; each item: `{ id, projectId, name, branch, prNumber, createdAt }`; 404 if
   project unknown
 - `POST /api/projects/:pid/workspaces` — request body:
   `{ "branch": "feature/my-feature", "name": "My Feature", "prNumber": 0 }`;
   `name` defaults to the branch name when omitted; `prNumber` defaults to 0;
   creates the workspace record and the git worktree; response: full `Workspace`
-  JSON (`id`, `name`, `branch`, `prNumber`, `createdAt`); 400 if `branch` is
+  JSON (`id`, `projectId`, `name`, `branch`, `prNumber`, `createdAt`); 400 if `branch` is
   absent; 404 if the project is unknown; 502 if `git worktree add` fails
 - `GET /api/projects/:pid/workspaces/:wid` — returns full workspace metadata
-  (same shape as list item); 404 if project or workspace unknown
+  (same shape as list item, including `projectId`); 404 if project or workspace unknown
 - `DELETE /api/projects/:pid/workspaces/:wid` — runs `git worktree remove`,
   removes the workspace record; returns 204 on success; 404 if unknown
 
