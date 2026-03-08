@@ -94,7 +94,7 @@ React SPA in step 1.7.
 6. Click "Sign out" and confirm the session cookie is cleared and the browser
    returns to the login page.
 
-### 1.4 Demo Login Page
+### 1.4 Demo Login Page ✅
 
 The earliest deliverable with a previewable frontend: a minimal Vite + React +
 TypeScript SPA that renders only the `LoginPage`. This phase ships the entire
@@ -180,7 +180,92 @@ guard in `make site-build-with-demo` is a no-op and only the Hugo docs are deplo
 3. Cloudflare Pages posts a preview URL on the PR; the demo is accessible at
    `<preview-url>/demo/` alongside the documentation.
 
-### 1.5 Project and Workspace Registration
+### 1.5 SPA GitHub OAuth Login *(parallel with 1.6)*
+
+Connects the React SPA to the existing GitHub OAuth backend (Phase 1.2) and
+gates protected pages behind authenticated sessions. Phases 1.5 and 1.6 are
+**independent parallel tracks**: each can be merged without waiting for the
+other.
+
+- `client/src/context/AuthContext.tsx` — React context + `AuthProvider` that
+  calls `GET /api/whoami` once on mount and exposes `{ user, loading }` to the
+  component tree; no demo-specific branches in the context itself
+- `useAuth()` hook exported from the same file; consumed by `RootRoute` and
+  `AuthGuard`
+- Update `client/src/App.tsx`:
+  - Wrap the app in `<AuthProvider>`
+  - `RootRoute` (at `/`): in demo mode always renders `LoginPage`; in
+    production, shows a blank loading state while the `useAuth()` check is in
+    flight, redirects to `/projects` if authenticated, shows `LoginPage`
+    otherwise
+  - `AuthGuard` wrapper: redirects unauthenticated users to `/` for all
+    protected routes
+  - `/projects` is now wrapped in `<AuthGuard>`
+  - Remove the unused `/demo` catch-all route
+- Update `client/src/pages/LoginPage.tsx` — demo mode: replace the
+  `password` form from Phase 1.4 with a single **"Try Demo"** button that
+  calls `navigate('/projects')` directly (no password check, no network call)
+
+**MSW:** the existing `GET /api/whoami → { login: 'demo', id: 0 }` handler
+from Phase 1.4 already satisfies the auth check on the `/projects` page in
+demo mode; no new handlers are needed for this phase.
+
+**Acceptance:**
+
+1. Demo mode (`VITE_DEMO_MODE=true`): visiting `/demo/` shows the DemoBanner
+   and the `LoginPage` with a "Try Demo" button; clicking it navigates to
+   `/projects`.
+2. Demo mode: visiting `/projects` directly (e.g., via the browser's address
+   bar) renders the `ProjectsPage` without redirecting away.
+3. Production mode (real server): visiting `/` with no session cookie renders
+   the `LoginPage` with a "Sign in with GitHub" button.
+4. Production mode: completing the GitHub OAuth flow sets a session cookie and
+   the user is taken to `/projects`.
+5. Production mode: visiting `/projects` with no session cookie redirects the
+   browser to `/`.
+
+### 1.6 SPA Add Project from GitHub *(parallel with 1.5)*
+
+Connects the project-list page to the REST API so users can browse their
+GitHub repositories and register new projects. Phases 1.5 and 1.6 are
+**independent parallel tracks**.
+
+- Update `client/src/pages/ProjectsPage.tsx`:
+  - Top-level `ProjectsPage` component fetches `GET /api/projects` on mount
+    using `useEffect` + `useState`; replaces the hardcoded `PROJECTS` constant
+    with live API data; adapts the API shape (`{ id, name, repoURL, createdAt }`)
+    to the existing UI shape with a `toUiProject()` helper
+  - Pass the project list as a prop to `DesktopView` and `MobileView` instead
+    of reading the module-level constant; add loading and error states
+  - `AddProjectDialog`: replace the hardcoded `REPOS` constant with a
+    `useEffect` that calls `GET /api/github/repos` on open; update the "Add
+    Project" button to call `POST /api/projects` with
+    `{ repoURL: selectedRepo.htmlURL }`; accept an `onAdd` callback to refresh
+    the project list on success
+- Add the following MSW handlers to `client/src/mocks/handlers.ts`:
+  - `GET /api/projects` → two hard-coded projects (`demo-web`, `demo-api`)
+  - `POST /api/projects` → accepts `{ repoURL }`, inserts a new stub project
+    into the in-handler list, and returns it as JSON
+  - `GET /api/github/repos` → a short list of four hard-coded GitHub
+    repository stubs (used by the repo-picker dialog)
+
+**Note:** workspace data (`GET /api/projects/:pid/workspaces`) is not yet
+connected; workspace rows in the accordion/card show an empty list until
+Phase 1.8.
+
+**Acceptance:**
+
+1. Demo mode: the project list renders with the two seeded projects from MSW;
+   no hardcoded constant is read.
+2. Demo mode: clicking **"+ New Project"** opens the repo-picker dialog, which
+   shows the four hard-coded GitHub repos.
+3. Demo mode: selecting a repo and clicking **"Add Project"** closes the dialog
+   and the new project appears in the list without a page reload.
+4. Demo mode: `VITE_DEMO_MODE=true npm run build` succeeds with no errors.
+5. Production mode: the project list and repo picker call real API endpoints;
+   requires Phase 1.7 backend to be running.
+
+### 1.7 Project and Workspace Registration
 
 **Data models** (as specified in `DESIGN.md §5.1` and `§6.1`):
 
@@ -302,7 +387,7 @@ type Workspace struct {
 8. `POST /api/projects/:pid/workspaces` with a missing `branch` returns 400;
    an unknown `:pid` returns 404.
 
-### 1.6 Terminal Backend
+### 1.8 Terminal Backend
 
 - `internal/terminal/` package
   - `Session` — wraps a `creack/pty` PTY + `exec.Cmd` (shell) + mutex-protected
@@ -321,16 +406,12 @@ type Workspace struct {
 **Acceptance:** `websocat` or a small test harness can attach to the WebSocket,
 send resize + input, and receive shell output.
 
-### 1.7 Minimal Web Client
+### 1.9 Minimal Web Client
 
-A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
+Completes the full Phase 1 end-to-end flow by adding workspace management and
+the embedded terminal. The `LoginPage` (Phase 1.5) and project registration UI
+(Phase 1.6) are already complete; this phase adds:
 
-- `LoginPage` — shows a "Sign in with GitHub" button; shown when the user has no
-  valid session
-- `ProjectListPage` — lists available projects (fetched from `GET /api/projects`)
-  and provides a **"+ New Project"** button that opens a repository-picker dialog:
-  the dialog calls `GET /api/github/repos` to list the user's GitHub repos, lets
-  the user select one, and calls `POST /api/projects` to register and clone it
 - `WorkspaceListPage` — lists workspaces for a selected project; fetched from
   `GET /api/projects/:pid/workspaces`; includes a button to create a new
   workspace
@@ -352,17 +433,12 @@ not in a follow-up PR. See the
 [Testing & Validation Strategy](#testing--validation-strategy) for the full
 pattern.
 
-**Demo mode for this phase** (extends the handlers from Phase 1.4):
+**Demo mode for this phase** (extends the handlers from Phases 1.5 and 1.6):
 
 - Add to `src/mocks/handlers.ts`:
-  - `GET /api/projects` → two hard-coded projects (`demo-web`, `demo-api`)
-  - `POST /api/projects` → creates a new project stub from the supplied
-    `repoURL`; returns it as JSON
   - `GET /api/projects/:pid` → metadata for the matching project
   - `DELETE /api/projects/:pid` → 204 success stub; removes the project from
     the in-demo-memory list so the UI refreshes correctly
-  - `GET /api/github/repos` → a short hard-coded list of GitHub repository
-    stubs (used by the repo-picker dialog)
   - `GET /api/projects/:pid/workspaces` → one pre-seeded workspace per project
     (`main` branch)
   - `POST /api/projects/:pid/workspaces` → returns a new workspace stub
@@ -372,9 +448,6 @@ pattern.
     system processes are spawned
   - `POST /api/projects/:pid/workspaces/:wid/terminals` → returns
     `{ terminalId: "demo-term" }`
-- Update `LoginPage` in demo mode: replace the password form from Phase 1.4 with
-  a "Try Demo" button that navigates directly to `ProjectListPage` (no
-  password prompt needed once the full flow is wired up)
 
 **Per-PR Cloudflare Pages deployment** is already active from Phase 1.4 — this
 phase's changes will automatically trigger a preview.
@@ -406,7 +479,8 @@ phase's changes will automatically trigger a preview.
 | `internal/slug/` | URL-safe slug generation helper used by project and workspace managers |
 | `internal/terminal/` | PTY session management |
 | `client/` | Vite + React + TypeScript SPA (bootstrapped in Phase 1.4) |
-| `client/src/mocks/` | MSW handlers and browser/server worker entry points (created in Phase 1.4) |
+| `client/src/context/AuthContext.tsx` | Auth context and `useAuth` hook (Phase 1.5) |
+| `client/src/mocks/` | MSW handlers and browser/server worker entry points (created in Phase 1.4, extended in 1.5 and 1.6) |
 | `docs/examples/dev-console.yaml.example` | Annotated sample configuration |
 | `Makefile` | `make build`, `make dev`, `make test`, `make site-build-with-demo` targets |
 
@@ -698,14 +772,13 @@ local `npm run demo` convenience script. It is never set in the production build
 
 - A persistent banner `DemoBanner` component, rendered at the root of the app
   when `VITE_DEMO_MODE` is `'true'`, reads **"Demo mode — no data is saved"**.
-- `LoginPage` in demo mode uses a static-password form (Phase 1.4 through 1.6):
+- `LoginPage` in demo mode uses a static-password form (Phase 1.4 only):
   entering the password `demo` navigates into the app; any other input shows an
   inline error message. No network call is made — the SPA runs completely
-  without a backend during these phases because it is deployed only to
+  without a backend during this phase because it is deployed only to
   Cloudflare Pages and the Go-embedded HTML templates still serve the real
-  `/login` and `/` routes. In Phase 1.7, when the SPA is embedded in the Go
-  binary, the password form is replaced by a "Try Demo" button that navigates
-  directly to `WorkspaceListPage`.
+  `/login` and `/` routes. In Phase 1.5, the password form is replaced by a
+  "Try Demo" button that navigates directly to `ProjectListPage`.
 
 ### PR Preview Deployments
 

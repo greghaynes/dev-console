@@ -1,81 +1,96 @@
 /**
- * ProjectsPage — responsive project-selection wireframe.
+ * ProjectsPage — responsive project-selection page.
  *
  * On desktop (≥ 768 px): Variant C — compact table with search filter and
  * in-place accordion workspace expansion.
  * On mobile (< 768 px):  Variant A — classic full-width card list with a
  * centred "Add Project" modal.
  *
- * Both views share the same mock data and colour tokens so the page can be
- * dropped into a functional implementation later without structural changes.
+ * Project data is fetched from GET /api/projects. In demo mode, MSW intercepts
+ * the request and returns seeded data.
  */
 
 import { useEffect, useState } from 'react'
 
 // ---------------------------------------------------------------------------
-// Shared data
+// API types
 // ---------------------------------------------------------------------------
 
-const PROJECTS = [
-  {
-    id: 'my-project',
-    name: 'my-project',
-    repo: 'myorg/my-project',
-    repoDisplay: 'github.com/myorg/my-project',
-    language: 'Go',
-    lastUsed: '2h',
-    lastUsedFull: '2 hours ago',
-    workspaces: [
-      { id: 'main', branch: 'main', pr: null, lastUsed: '2h ago' },
-      { id: 'feature-auth', branch: 'feature/auth', pr: '#42', lastUsed: '1d ago' },
-      { id: 'fix-logs', branch: 'fix/logs', pr: '#45', lastUsed: '4d ago' },
-    ],
-  },
-  {
-    id: 'backend-api',
-    name: 'backend-api',
-    repo: 'myorg/backend-api',
-    repoDisplay: 'github.com/myorg/backend-api',
-    language: 'Go',
-    lastUsed: '1d',
-    lastUsedFull: '1 day ago',
-    workspaces: [
-      { id: 'main', branch: 'main', pr: null, lastUsed: '1d ago' },
-    ],
-  },
-  {
-    id: 'frontend-app',
-    name: 'frontend-app',
-    repo: 'myorg/frontend-app',
-    repoDisplay: 'github.com/myorg/frontend-app',
-    language: 'TypeScript',
-    lastUsed: '3d',
-    lastUsedFull: '3 days ago',
-    workspaces: [
-      { id: 'main', branch: 'main', pr: null, lastUsed: '3d ago' },
-      { id: 'feat-dark', branch: 'feat/dark-mode', pr: '#31', lastUsed: '3d ago' },
-    ],
-  },
-  {
-    id: 'docs',
-    name: 'docs',
-    repo: 'myorg/docs',
-    repoDisplay: 'github.com/myorg/docs',
-    language: 'Markdown',
-    lastUsed: '1w',
-    lastUsedFull: '1 week ago',
-    workspaces: [
-      { id: 'main', branch: 'main', pr: null, lastUsed: '1w ago' },
-    ],
-  },
-]
+interface ApiProject {
+  id: string
+  name: string
+  repoURL: string
+  createdAt: string
+}
 
-const REPOS = [
-  { full_name: 'myorg/my-project', language: 'Go', updated: '2h ago' },
-  { full_name: 'myorg/backend-api', language: 'Go', updated: '1d ago' },
-  { full_name: 'myorg/frontend-app', language: 'TypeScript', updated: '3d ago' },
-  { full_name: 'myorg/docs', language: 'Markdown', updated: '1w ago' },
-]
+interface ApiGithubRepo {
+  id: number
+  fullName: string
+  description: string
+  language: string
+  updatedAt: string
+  htmlURL: string
+}
+
+// ---------------------------------------------------------------------------
+// UI types (shape expected by rendering components)
+// ---------------------------------------------------------------------------
+
+interface UiWorkspace {
+  id: string
+  branch: string
+  pr: string | null
+  lastUsed: string
+}
+
+interface UiProject {
+  id: string
+  name: string
+  repo: string
+  repoDisplay: string
+  language: string
+  lastUsed: string
+  lastUsedFull: string
+  workspaces: UiWorkspace[]
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function handleResponse<T>(r: Response): Promise<T> {
+  if (!r.ok) return Promise.reject(new Error(`HTTP ${r.status}`))
+  return r.json() as Promise<T>
+}
+
+function formatRelative(isoDate: string): { short: string; full: string } {
+  const ms = Math.max(0, Date.now() - new Date(isoDate).getTime())
+  const mins = Math.floor(ms / 60_000)
+  const hours = Math.floor(ms / 3_600_000)
+  const days = Math.floor(ms / 86_400_000)
+  const weeks = Math.floor(days / 7)
+
+  if (mins < 60) return { short: `${mins}m`, full: `${mins} minutes ago` }
+  if (hours < 24) return { short: `${hours}h`, full: `${hours} hours ago` }
+  if (days < 7) return { short: `${days}d`, full: `${days} days ago` }
+  return { short: `${weeks}w`, full: `${weeks} weeks ago` }
+}
+
+function toUiProject(p: ApiProject): UiProject {
+  const repoPath = p.repoURL.replace('https://github.com/', '')
+  const repoDisplay = p.repoURL.replace('https://', '')
+  const { short, full } = formatRelative(p.createdAt)
+  return {
+    id: p.id,
+    name: p.name,
+    repo: repoPath,
+    repoDisplay,
+    language: '',
+    lastUsed: short,
+    lastUsedFull: full,
+    workspaces: [],
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Tokens
@@ -131,13 +146,38 @@ function useIsDesktop(): boolean {
 // Shared: "Add Project" dialog  (used by both views)
 // ---------------------------------------------------------------------------
 
-function AddProjectDialog({ onClose }: { onClose: () => void }) {
+function AddProjectDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (project: ApiProject) => void }) {
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [repos, setRepos] = useState<ApiGithubRepo[]>([])
+  const [reposLoading, setReposLoading] = useState(true)
+  const [reposError, setReposError] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
 
-  const filtered = REPOS.filter(r =>
-    r.full_name.toLowerCase().includes(filter.toLowerCase()),
+  useEffect(() => {
+    fetch('/api/github/repos')
+      .then(r => handleResponse<ApiGithubRepo[]>(r))
+      .then(data => { setRepos(data); setReposLoading(false) })
+      .catch(err => { setReposError((err as Error).message); setReposLoading(false) })
+  }, [])
+
+  const filtered = repos.filter(r =>
+    r.fullName.toLowerCase().includes(filter.toLowerCase()),
   )
+
+  function handleAdd() {
+    const repo = repos.find(r => r.fullName === selected)
+    if (!repo || adding) return
+    setAdding(true)
+    fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repoURL: repo.htmlURL }),
+    })
+      .then(r => handleResponse<ApiProject>(r))
+      .then(project => { onAdd(project) })
+      .catch(() => { setAdding(false) })
+  }
 
   function repoRowStyle(isSelected: boolean): React.CSSProperties {
     return {
@@ -254,28 +294,41 @@ function AddProjectDialog({ onClose }: { onClose: () => void }) {
           value={filter}
           onChange={e => setFilter(e.target.value)}
           style={s.filterInput}
+          disabled={reposLoading}
         />
         <div style={s.repoList}>
-          {filtered.map((repo, i) => (
+          {reposLoading && (
+            <div style={{ padding: '1.5rem', textAlign: 'center', color: C.muted }}>
+              Loading repositories…
+            </div>
+          )}
+          {reposError && (
+            <div style={{ padding: '1.5rem', textAlign: 'center', color: '#f87171' }}>
+              Failed to load repositories: {reposError}
+            </div>
+          )}
+          {!reposLoading && !reposError && filtered.map((repo, i) => (
             <div
-              key={repo.full_name}
+              key={repo.id}
               style={{
-                ...repoRowStyle(selected === repo.full_name),
+                ...repoRowStyle(selected === repo.fullName),
                 borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : 'none',
               }}
-              onClick={() => setSelected(repo.full_name)}
+              onClick={() => setSelected(repo.fullName)}
             >
               <div style={s.radioOuter}>
-                {selected === repo.full_name && <div style={s.radioInner} />}
+                {selected === repo.fullName && <div style={s.radioInner} />}
               </div>
-              <span style={s.repoName}>{repo.full_name}</span>
-              <span style={s.repoMeta}>{repo.language} · Updated {repo.updated}</span>
+              <span style={s.repoName}>{repo.fullName}</span>
+              <span style={s.repoMeta}>{repo.language} · Updated {new Date(repo.updatedAt).toLocaleDateString()}</span>
             </div>
           ))}
         </div>
         <div style={s.actions}>
           <button style={s.cancelBtn} onClick={onClose}>Cancel</button>
-          <button style={s.addBtn} disabled={!selected}>Add Project ›</button>
+          <button style={s.addBtn} disabled={!selected || adding} onClick={handleAdd}>
+            {adding ? 'Adding…' : 'Add Project ›'}
+          </button>
         </div>
       </div>
     </div>
@@ -286,7 +339,7 @@ function AddProjectDialog({ onClose }: { onClose: () => void }) {
 // Desktop view (Variant C)
 // ---------------------------------------------------------------------------
 
-function WorkspaceRow({ ws }: { ws: typeof PROJECTS[0]['workspaces'][0] }) {
+function WorkspaceRow({ ws }: { ws: UiWorkspace }) {
   const [hover, setHover] = useState(false)
   const s: Record<string, React.CSSProperties> = {
     row: {
@@ -332,7 +385,7 @@ function WorkspaceRow({ ws }: { ws: typeof PROJECTS[0]['workspaces'][0] }) {
   )
 }
 
-function ProjectTableRow({ project }: { project: typeof PROJECTS[0] }) {
+function ProjectTableRow({ project }: { project: UiProject }) {
   const [expanded, setExpanded] = useState(false)
   const [hover, setHover] = useState(false)
 
@@ -406,10 +459,10 @@ function ProjectTableRow({ project }: { project: typeof PROJECTS[0] }) {
   )
 }
 
-function DesktopView({ onNewProject }: { onNewProject: () => void }) {
+function DesktopView({ onNewProject, projects }: { onNewProject: () => void; projects: UiProject[] }) {
   const [query, setQuery] = useState('')
 
-  const filtered = PROJECTS.filter(
+  const filtered = projects.filter(
     p =>
       p.name.toLowerCase().includes(query.toLowerCase()) ||
       p.repo.toLowerCase().includes(query.toLowerCase()),
@@ -532,7 +585,9 @@ function DesktopView({ onNewProject }: { onNewProject: () => void }) {
             <span style={{ ...s.col, minWidth: '7rem', textAlign: 'right' }}>Last Used</span>
           </div>
           {filtered.length === 0 ? (
-            <div style={s.emptyRow}>No projects match "{query}"</div>
+            <div style={s.emptyRow}>
+              {query ? `No projects match "${query}"` : 'No projects yet. Click "+ New Project" to add one.'}
+            </div>
           ) : (
             filtered.map(p => <ProjectTableRow key={p.id} project={p} />)
           )}
@@ -547,7 +602,7 @@ function DesktopView({ onNewProject }: { onNewProject: () => void }) {
 // Mobile view (Variant A)
 // ---------------------------------------------------------------------------
 
-function ProjectCard({ project }: { project: typeof PROJECTS[0] }) {
+function ProjectCard({ project }: { project: UiProject }) {
   const [hover, setHover] = useState(false)
   const s: Record<string, React.CSSProperties> = {
     card: {
@@ -604,7 +659,7 @@ function ProjectCard({ project }: { project: typeof PROJECTS[0] }) {
   )
 }
 
-function MobileView({ onNewProject }: { onNewProject: () => void }) {
+function MobileView({ onNewProject, projects }: { onNewProject: () => void; projects: UiProject[] }) {
   const s: Record<string, React.CSSProperties> = {
     header: {
       display: 'flex',
@@ -670,7 +725,10 @@ function MobileView({ onNewProject }: { onNewProject: () => void }) {
           <button style={s.newBtn} onClick={onNewProject}>+ New Project</button>
         </div>
         <hr style={s.divider} />
-        {PROJECTS.map(p => <ProjectCard key={p.id} project={p} />)}
+        {projects.length === 0
+          ? <p style={{ color: C.muted, textAlign: 'center', marginTop: '2rem' }}>No projects yet.</p>
+          : projects.map(p => <ProjectCard key={p.id} project={p} />)
+        }
       </main>
     </>
   )
@@ -683,13 +741,42 @@ function MobileView({ onNewProject }: { onNewProject: () => void }) {
 export default function ProjectsPage() {
   const isDesktop = useIsDesktop()
   const [showDialog, setShowDialog] = useState(false)
+  const [apiProjects, setApiProjects] = useState<ApiProject[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(true)
+  const [projectsError, setProjectsError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/projects')
+      .then(r => handleResponse<ApiProject[]>(r))
+      .then(data => { setApiProjects(data); setProjectsLoading(false) })
+      .catch(err => { setProjectsError((err as Error).message); setProjectsLoading(false) })
+  }, [])
+
+  const uiProjects = apiProjects.map(toUiProject)
+
+  function handleAddProject(project: ApiProject) {
+    setApiProjects(ps => [...ps, project])
+    setShowDialog(false)
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: C.bg }}>
-      {isDesktop
-        ? <DesktopView onNewProject={() => setShowDialog(true)} />
-        : <MobileView onNewProject={() => setShowDialog(true)} />}
-      {showDialog && <AddProjectDialog onClose={() => setShowDialog(false)} />}
+      {projectsLoading && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted }}>
+          Loading projects…
+        </div>
+      )}
+      {projectsError && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171' }}>
+          Failed to load projects: {projectsError}
+        </div>
+      )}
+      {!projectsLoading && !projectsError && (
+        isDesktop
+          ? <DesktopView onNewProject={() => setShowDialog(true)} projects={uiProjects} />
+          : <MobileView onNewProject={() => setShowDialog(true)} projects={uiProjects} />
+      )}
+      {showDialog && <AddProjectDialog onClose={() => setShowDialog(false)} onAdd={handleAddProject} />}
     </div>
   )
 }
