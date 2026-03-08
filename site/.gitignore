@@ -7,3 +7,6 @@ resources/
 
 # Hugo vendored modules (fetched at build time via go.mod/go.sum)
 _vendor/
+
+# Generated demo SPA (built by site-build-with-demo; not checked in)
+static/demo/

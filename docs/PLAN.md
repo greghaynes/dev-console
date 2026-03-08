@@ -78,7 +78,7 @@ Pages / endpoints:
 Templates are Go `html/template` files stored in `internal/templates/` and
 embedded in the binary via `go:embed`; styling uses only inline CSS so no
 additional build step is required. This site is intentionally replaced by the
-React SPA in step 1.6.
+React SPA in step 1.7.
 
 **Acceptance:** After completing step 1.2 configuration, an operator can:
 
@@ -94,7 +94,93 @@ React SPA in step 1.6.
 6. Click "Sign out" and confirm the session cookie is cleared and the browser
    returns to the login page.
 
-### 1.4 Workspace Registration
+### 1.4 Demo Login Page
+
+The earliest deliverable with a previewable frontend: a minimal Vite + React +
+TypeScript SPA that renders only the `LoginPage`. This phase ships the entire
+demo-mode infrastructure and the per-PR CI preview workflow before any real
+backend plumbing beyond auth exists.
+
+**Deployment model for this phase:** The React SPA is built as a standalone
+static bundle deployed as part of the existing documentation site on Cloudflare
+Pages — it is **not** embedded in the Go binary at this stage. Vite builds with
+`--base /demo/`, and the output is copied into `site/static/demo/` before Hugo
+runs. Hugo treats it as static content and includes it verbatim in `site/public/demo/`.
+The demo is therefore accessible at the `/demo/` path on the same Cloudflare
+Pages origin as the documentation, and no separate Cloudflare Pages project is
+required. The Go-embedded HTML templates from Phase 1.3 (`internal/templates/`)
+continue to serve `/login` and `/` for any running Go server instance. The SPA
+does not interfere with Go-served routes because it is hosted on the Cloudflare
+Pages documentation origin (a separate domain). The compiled SPA replaces the
+Go templates in Phase 1.7, when it is embedded in the binary via `go:embed`.
+
+**Client setup:**
+
+- Vite project bootstrapped in `client/` with TypeScript, React, and Tailwind
+  CSS (dark theme)
+
+**`LoginPage` component:**
+
+- **Demo mode** (`VITE_DEMO_MODE === 'true'`): renders a "Try Demo" heading, a
+  password field, and a "Log in" button. Entering the static password `demo`
+  navigates to a placeholder `/demo` page that reads "You're in — demo mode
+  active". Entering any other password shows an inline error message. No network
+  call is made.
+- **Production mode**: renders a "Sign in with GitHub" button pointing to
+  `/auth/login`
+
+**MSW infrastructure** (created here, extended in later phases):
+
+```text
+client/src/mocks/
+  handlers.ts   # starts empty except for GET /api/whoami → { login: "demo", id: 0 }
+  browser.ts    # startWorker() — MSW Service Worker bootstrap
+  server.ts     # setupServer() — Vitest / Node.js mock server
+```
+
+`client/src/main.tsx` conditionally starts the worker:
+
+```ts
+if (import.meta.env.VITE_DEMO_MODE === 'true') {
+  const { startWorker } = await import('./mocks/browser')
+  await startWorker()
+}
+```
+
+**`DemoBanner`** component rendered at the app root whenever
+`VITE_DEMO_MODE === 'true'`: a persistent bar reading **"Demo mode — no data is
+saved"**.
+
+**Cloudflare Pages build configuration:**
+
+The demo SPA is built as part of the Cloudflare Pages build — no separate CI
+workflow is needed. Configure the `dev-console` Cloudflare Pages project with:
+
+| Setting | Value |
+|---------|-------|
+| Build command | `make site-build-with-demo` |
+| Output directory | `site/public` |
+| Node.js version | `22` |
+| Environment variable | `VITE_DEMO_MODE=true` |
+
+Cloudflare Pages' native GitHub integration triggers a build on every commit and
+PR, and posts a deployment status with a preview URL directly on the PR. The demo
+is accessible at `<preview-url>/demo/` alongside the documentation.
+
+When `client/` does not yet exist (before Phase 1.4 is implemented), the build
+command degrades gracefully: the `@if [ -d "client" ] && [ -f "client/package.json" ]`
+guard in `make site-build-with-demo` is a no-op and only the Hugo docs are deployed.
+
+**Acceptance:**
+
+1. `VITE_DEMO_MODE=true npm run build` produces a static bundle with no server
+   dependency.
+2. `npm run preview` shows the login page; entering `demo` as the password
+   navigates to the placeholder page; entering anything else shows an error.
+3. Cloudflare Pages posts a preview URL on the PR; the demo is accessible at
+   `<preview-url>/demo/` alongside the documentation.
+
+### 1.5 Workspace Registration
 
 - `internal/workspace/` package — `Workspace` struct, in-memory registry loaded
   from config
@@ -105,7 +191,7 @@ React SPA in step 1.6.
 **Acceptance:** Config lists one workspace; `curl /api/workspaces` returns it as
 JSON.
 
-### 1.5 Terminal Backend
+### 1.6 Terminal Backend
 
 - `internal/terminal/` package
   - `Session` — wraps a `creack/pty` PTY + `exec.Cmd` (shell) + mutex-protected
@@ -124,7 +210,7 @@ JSON.
 **Acceptance:** `websocat` or a small test harness can attach to the WebSocket,
 send resize + input, and receive shell output.
 
-### 1.6 Minimal Web Client
+### 1.7 Minimal Web Client
 
 A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
 
@@ -136,14 +222,47 @@ A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
   an `xterm.js` `Terminal` instance attached to it; sends resize events when the
   window resizes; cleans up on unmount
 
-The compiled SPA is embedded in the Go binary via `go:embed` and served from `/`.
+The compiled SPA is embedded in the Go binary via `go:embed` and served from
+`/`, replacing the Go-embedded HTML templates from Phase 1.3
+(`internal/templates/`). The `internal/templates/` package and its routes
+(`GET /` and `GET /login`) are removed in this phase once the SPA takes over.
 
 Styling is minimal — Tailwind CSS with a dark theme matching a terminal aesthetic.
 No design polish is required at this stage.
 
+**Demo mode is a first-class deliverable of this phase, not an afterthought.**
+MSW handlers for every new endpoint must be committed alongside the components —
+not in a follow-up PR. See the
+[Testing & Validation Strategy](#testing--validation-strategy) for the full
+pattern.
+
+**Demo mode for this phase** (extends the handlers from Phase 1.4):
+
+- Add to `src/mocks/handlers.ts`:
+  - `GET /api/workspaces` → two hard-coded workspaces (`demo-web`, `demo-api`)
+  - `GET /api/workspaces/:id` → metadata for the matching workspace
+  - WebSocket `WS /api/workspaces/:id/terminals/:tid` → in-process echo handler
+    that prints a welcome banner and echoes input; no system processes are
+    spawned
+  - `POST /api/workspaces/:id/terminals` → returns `{ terminalId: "demo-term" }`
+- Update `LoginPage` in demo mode: replace the password form from Phase 1.4 with
+  a "Try Demo" button that navigates directly to `WorkspaceListPage` (no
+  password prompt needed once the full flow is wired up)
+
+**Per-PR Cloudflare Pages deployment** is already active from Phase 1.4 — this
+phase's changes will automatically trigger a preview.
+
 **Acceptance:** The full flow works in Chrome and Safari on both desktop and a
-375 px wide mobile viewport: login → workspace list → open terminal → interactive
-shell session.
+375 px wide mobile viewport:
+
+1. `VITE_DEMO_MODE=true npm run build` produces a static bundle with no server
+   dependency.
+2. `npm run preview` shows the demo banner and the full flow (login → workspace
+   list → open terminal → interactive echo session) without any backend.
+3. Cloudflare Pages posts a preview URL on the PR; the demo is accessible at
+   `<preview-url>/demo/` alongside the documentation.
+4. Against a real server (no `VITE_DEMO_MODE`): login → workspace list → open
+   terminal → interactive shell session.
 
 ### Phase 1 Deliverables
 
@@ -156,9 +275,10 @@ shell session.
 | `internal/templates/` | `html/template` files (embedded via `go:embed`) for the auth validation site |
 | `internal/workspace/` | Workspace registry |
 | `internal/terminal/` | PTY session management |
-| `client/` | Vite + React + TypeScript SPA |
+| `client/` | Vite + React + TypeScript SPA (bootstrapped in Phase 1.4) |
+| `client/src/mocks/` | MSW handlers and browser/server worker entry points (created in Phase 1.4) |
 | `docs/examples/dev-console.yaml.example` | Annotated sample configuration |
-| `Makefile` | `make build`, `make dev`, `make test` targets |
+| `Makefile` | `make build`, `make dev`, `make test`, `make site-build-with-demo` targets |
 
 ---
 
@@ -189,9 +309,13 @@ paths outside the root return 400.
   (`highlight.js`)
 - `WorkspacePage` — split layout: file tree on the left, viewer/terminal on the
   right; terminal from Phase 1 is accessible via a tab or panel
+- MSW handlers added/updated in `src/mocks/handlers.ts` for all new endpoints:
+  - `GET /api/workspaces/:id/files` → a small hard-coded directory tree
+  - `GET /api/workspaces/:id/file` → a few sample source files
 
 **Acceptance:** User can expand directories, click files, and read their contents.
-The terminal panel remains accessible.
+The terminal panel remains accessible. Demo build works end-to-end without a
+backend.
 
 ---
 
@@ -239,9 +363,15 @@ receive a correct streamed answer.
 - Tool calls and results shown as collapsible "tool use" blocks so the user can
   see what the agent is doing
 - Cancel button that sends `{ "type": "cancel" }` to the WebSocket
+- MSW handlers added/updated in `src/mocks/handlers.ts` for all new endpoints:
+  - `GET /api/workspaces/:id/sessions` → empty list initially
+  - `POST /api/workspaces/:id/sessions` → returns a new session stub
+  - WebSocket `WS /api/workspaces/:id/sessions/:sid/chat` → scripted handler
+    that emits a fixed sequence of `assistant_chunk` frames followed by
+    `assistant_done`, simulating a real streaming turn
 
 **Acceptance:** Full conversational loop visible in the browser; streaming text
-appears word-by-word.
+appears word-by-word. Demo build works end-to-end without a backend.
 
 ---
 
@@ -281,9 +411,17 @@ endpoint writes the file.
   view
 - Accept / Reject buttons per pending change
 - `ChangesPanel` listing all pending changes for the session
+- MSW handlers added/updated in `src/mocks/handlers.ts` for all new endpoints:
+  - `GET /api/workspaces/:id/sessions/:sid/changes` → one pre-seeded pending
+    change that modifies a file in the demo file tree
+  - `POST …/changes/:cid/accept` and `…/changes/:cid/reject` → success stubs
+  - `GET /api/workspaces/:id/git/status` → single modified file matching the
+    pending change
+  - `GET /api/workspaces/:id/git/diff` → a small hard-coded unified diff
 
 **Acceptance:** User can trigger a file edit via chat, review the diff, and accept
-or reject it. File tree updates after acceptance.
+or reject it. File tree updates after acceptance. Demo build works end-to-end
+without a backend.
 
 ---
 
@@ -312,9 +450,12 @@ or reject it. File tree updates after acceptance.
 - `PUT /api/workspaces/:id/file?path=` — saves file contents directly (bypasses
   pending-change flow; immediate write)
 - Dirty-state indicator; confirm before discarding unsaved changes
+- MSW handler added/updated in `src/mocks/handlers.ts`:
+  - `PUT /api/workspaces/:id/file` → success stub; in demo mode the edit is
+    visible within the session but nothing is persisted
 
 **Acceptance:** User can open a file, edit it, save it, and see the change
-reflected in `git/status`.
+reflected in `git/status`. Demo build works end-to-end without a backend.
 
 ---
 
@@ -354,6 +495,116 @@ reflected in `git/status`.
 - Structured JSON request logging (method, path, status, latency, user)
 - Health-check endpoint `GET /healthz`
 - Version endpoint `GET /api/version` returning build commit and date
+
+---
+
+## Testing & Validation Strategy
+
+### Rule: Demo mode is mandatory for all frontend functionality
+
+Every piece of frontend functionality **must** work in demo mode before it may
+be merged. This is not optional. A PR that adds or modifies frontend components
+without shipping the corresponding MSW handlers will be rejected.
+
+Demo mode serves two purposes:
+
+1. **Per-PR previews** — reviewers can interact with any UI change via the
+   auto-deployed Cloudflare Pages URL without running a server.
+2. **Unit testing** — the same MSW handlers are reused in Vitest tests, so
+   there is one source of truth for mock behaviour.
+
+### Pattern: Mock Service Worker (MSW)
+
+The project uses [Mock Service Worker](https://mswjs.io/) as the seam between
+real backend calls and demo/test stubs. MSW intercepts `fetch` and WebSocket
+calls at the browser's Service Worker layer, which means:
+
+- Component code is identical in real mode and demo mode — no `if (demo)`
+  branches in components or hooks.
+- Handlers live in one place (`src/mocks/handlers.ts`) and are reused by both
+  the in-browser demo and Vitest unit tests.
+- Adding support for a new API endpoint means adding one handler; there is no
+  parallel service-layer abstraction to maintain.
+
+**File layout:**
+
+```text
+client/src/mocks/
+  handlers.ts      # All MSW request/WebSocket handlers
+  browser.ts       # MSW browser worker setup (startWorker())
+  server.ts        # MSW Node.js server setup for Vitest (setupServer())
+```
+
+**Enabling demo mode:**
+
+In `client/src/main.tsx`:
+
+```ts
+if (import.meta.env.VITE_DEMO_MODE === 'true') {
+  const { startWorker } = await import('./mocks/browser')
+  await startWorker()
+}
+```
+
+The `VITE_DEMO_MODE` variable is set to `'true'` only in the CI demo build and
+local `npm run demo` convenience script. It is never set in the production build.
+
+**Handler conventions:**
+
+- HTTP handlers use `http.get`, `http.post`, `http.put`, `http.delete` from
+  `msw`.
+- WebSocket handlers use `ws` from `msw` (requires `msw` ≥ 2.x).
+- Mock data is deterministic and minimal — just enough to exercise the UI flow.
+- Delay utilities (`delay()` from `msw`) may be used to simulate realistic
+  latency (e.g. a 200–400 ms delay on the workspace list, token-by-token
+  streaming on chat).
+
+**Demo-specific UI:**
+
+- A persistent banner `DemoBanner` component, rendered at the root of the app
+  when `VITE_DEMO_MODE` is `'true'`, reads **"Demo mode — no data is saved"**.
+- `LoginPage` in demo mode uses a static-password form (Phase 1.4 through 1.6):
+  entering the password `demo` navigates into the app; any other input shows an
+  inline error message. No network call is made — the SPA runs completely
+  without a backend during these phases because it is deployed only to
+  Cloudflare Pages and the Go-embedded HTML templates still serve the real
+  `/login` and `/` routes. In Phase 1.7, when the SPA is embedded in the Go
+  binary, the password form is replaced by a "Try Demo" button that navigates
+  directly to `WorkspaceListPage`.
+
+### PR Preview Deployments
+
+The `dev-console` Cloudflare Pages project is configured to use
+`make site-build-with-demo` as its build command (`site/public` as the output
+directory). Cloudflare Pages' native GitHub integration takes care of the rest:
+
+1. On every PR commit, Cloudflare Pages runs `make site-build-with-demo`.
+2. If `client/` exists, the target builds the SPA with `VITE_DEMO_MODE=true` and
+   `--base /demo/`, copies the output to `site/static/demo/`, then runs Hugo to
+   produce `site/public/` with the documentation **and** the demo at `/demo/`.
+3. If `client/` does not yet exist (or has no `package.json`), the guard in
+   `make site-build-with-demo` is a no-op and only the Hugo docs are built and
+   deployed.
+4. Cloudflare Pages posts a deployment status with the preview URL directly on
+   the PR. The demo is accessible at `<preview-url>/demo/`.
+
+No GitHub Actions workflow or repository secrets are required for deployments.
+
+PRs that include user-visible UI changes **must** include a screenshot or screen
+recording taken from the `<preview-url>/demo/` Cloudflare Pages URL in the PR
+description.
+
+### Acceptance Gate (applies to every phase with frontend work)
+
+A phase is not done until all of the following hold:
+
+1. `VITE_DEMO_MODE=true npm run build` succeeds with no errors or warnings.
+2. `npm run preview` (or the Cloudflare Pages URL) shows a fully functional demo
+   covering all UI flows introduced in the phase — no backend required.
+3. `npm test` (Vitest) passes; tests exercise components using the same MSW
+   handlers as the demo.
+4. Cloudflare Pages posts a preview URL on the PR with the demo accessible at
+   `<preview-url>/demo/`.
 
 ---
 
@@ -397,4 +648,8 @@ OpenAI are tested simultaneously.
 1. `make build` succeeds with no warnings.
 2. `make test` passes with no failures.
 3. The acceptance criteria listed in each section are manually verified.
-4. A brief entry is added to `CHANGELOG.md` describing what shipped.
+4. **For phases with frontend work:** all items in the Acceptance Gate in the
+   [Testing & Validation Strategy](#testing--validation-strategy) are satisfied —
+   in particular, the demo build works without a backend and the `demo-preview`
+   CI workflow produces a preview URL.
+5. A brief entry is added to `CHANGELOG.md` describing what shipped.

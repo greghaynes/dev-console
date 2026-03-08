@@ -3,3 +3,16 @@
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Explicitly declare the SPA entry-point as text/html so that browsers
+# (and Cloudflare Workers static-asset serving) never treat it as an
+# octet-stream download when X-Content-Type-Options: nosniff is active.
+/demo/
+  Content-Type: text/html; charset=UTF-8
+
+/demo/index.html
+  Content-Type: text/html; charset=UTF-8
+
+# Hashed Vite assets are immutable — cache aggressively.
+/demo/assets/*
+  Cache-Control: public, max-age=31536000, immutable

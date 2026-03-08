@@ -27,6 +27,10 @@ publishDir = "public"
 
 [menu]
   [[menu.before]]
+    name = "Try the Demo"
+    url = "/demo/"
+    weight = 5
+  [[menu.before]]
     name = "GitHub"
     url = "https://github.com/greghaynes/dev-console"
     weight = 10
