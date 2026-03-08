@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
-import DemoPage from './pages/DemoPage'
+import ProjectsPage from './pages/ProjectsPage'
 import DemoBanner from './components/DemoBanner'
 import WireframesIndex from './pages/wireframes/WireframesIndex'
 import VariantA from './pages/wireframes/VariantA'
@@ -15,7 +15,8 @@ export default function App() {
       {DEMO_MODE && <DemoBanner />}
       <Routes>
         <Route path="/" element={<LoginPage />} />
-        <Route path="/demo" element={<DemoPage />} />
+        <Route path="/demo" element={<ProjectsPage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/wireframes" element={<WireframesIndex />} />
         <Route path="/wireframes/variant-a" element={<VariantA />} />
         <Route path="/wireframes/variant-b" element={<VariantB />} />
