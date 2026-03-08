@@ -200,7 +200,7 @@ type Workspace struct {
     ProjectID string    `json:"projectId"` // Parent project ID
     Name      string    `json:"name"`      // Display name; defaults to the branch name
     Branch    string    `json:"branch"`    // Git branch name
-    PRNumber  int       `json:"prNumber"`  // GitHub PR number; 0 means no PR is associated yet
+    PRNumber  *int      `json:"prNumber"`  // GitHub PR number; nil/JSON null means no PR is associated yet
     CreatedAt time.Time `json:"createdAt"`
 }
 ```
