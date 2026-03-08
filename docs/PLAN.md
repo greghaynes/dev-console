@@ -180,16 +180,26 @@ guard in `make site-build-with-demo` is a no-op and only the Hugo docs are deplo
 3. Cloudflare Pages posts a preview URL on the PR; the demo is accessible at
    `<preview-url>/demo/` alongside the documentation.
 
-### 1.5 Workspace Registration
+### 1.5 Project and Workspace Registration
 
-- `internal/workspace/` package — `Workspace` struct, in-memory registry loaded
+- `internal/project/` package — `Project` struct, in-memory registry loaded
   from config
-- `GET /api/workspaces` — returns the list of registered workspaces (id, name)
-- `GET /api/workspaces/:id` — returns metadata for a single workspace; 404 if
+- `internal/workspace/` package — `Workspace` struct, in-memory store keyed by
+  project; workspaces are created at runtime (not from config)
+- `GET /api/projects` — returns the list of registered projects (id, name,
+  repoURL)
+- `GET /api/projects/:pid` — returns metadata for a single project; 404 if
+  unknown
+- `GET /api/projects/:pid/workspaces` — returns the list of workspaces for a
+  project
+- `POST /api/projects/:pid/workspaces` — creates a new workspace (branch,
+  optional prNumber); 404 if project unknown
+- `GET /api/projects/:pid/workspaces/:wid` — returns workspace metadata; 404 if
   unknown
 
-**Acceptance:** Config lists one workspace; `curl /api/workspaces` returns it as
-JSON.
+**Acceptance:** Config lists one project; `curl /api/projects` returns it as
+JSON. `POST /api/projects/:pid/workspaces` creates a workspace and
+`GET /api/projects/:pid/workspaces` lists it.
 
 ### 1.6 Terminal Backend
 
@@ -199,9 +209,9 @@ JSON.
   - `Manager` — creates, retrieves, and destroys terminal sessions; enforces
     per-workspace session limit (initially unlimited)
 - REST endpoints (behind `RequireAuth`):
-  - `POST /api/workspaces/:id/terminals` → `{ terminalId }`
-  - `DELETE /api/workspaces/:id/terminals/:tid`
-- WebSocket endpoint `WS /api/workspaces/:id/terminals/:tid`:
+  - `POST /api/projects/:pid/workspaces/:wid/terminals` → `{ terminalId }`
+  - `DELETE /api/projects/:pid/workspaces/:wid/terminals/:tid`
+- WebSocket endpoint `WS /api/projects/:pid/workspaces/:wid/terminals/:tid`:
   - Reads JSON `{ "type": "resize", "cols": N, "rows": N }` control frame on
     connect; subsequent binary/text frames are raw PTY stdin
   - Pumps PTY stdout as binary WebSocket frames to the client
@@ -216,8 +226,11 @@ A React + TypeScript SPA (bootstrapped with Vite) that provides exactly:
 
 - `LoginPage` — shows a "Sign in with GitHub" button; shown when the user has no
   valid session
-- `WorkspaceListPage` — lists available workspaces; fetched from
-  `GET /api/workspaces`
+- `ProjectListPage` — lists available projects; fetched from
+  `GET /api/projects`
+- `WorkspaceListPage` — lists workspaces for a selected project; fetched from
+  `GET /api/projects/:pid/workspaces`; includes a button to create a new
+  workspace
 - `TerminalPage` — creates a terminal session, opens the WebSocket, and renders
   an `xterm.js` `Terminal` instance attached to it; sends resize events when the
   window resizes; cleans up on unmount
@@ -239,14 +252,18 @@ pattern.
 **Demo mode for this phase** (extends the handlers from Phase 1.4):
 
 - Add to `src/mocks/handlers.ts`:
-  - `GET /api/workspaces` → two hard-coded workspaces (`demo-web`, `demo-api`)
-  - `GET /api/workspaces/:id` → metadata for the matching workspace
-  - WebSocket `WS /api/workspaces/:id/terminals/:tid` → in-process echo handler
-    that prints a welcome banner and echoes input; no system processes are
-    spawned
-  - `POST /api/workspaces/:id/terminals` → returns `{ terminalId: "demo-term" }`
+  - `GET /api/projects` → two hard-coded projects (`demo-web`, `demo-api`)
+  - `GET /api/projects/:pid` → metadata for the matching project
+  - `GET /api/projects/:pid/workspaces` → one pre-seeded workspace per project
+    (`main` branch)
+  - `POST /api/projects/:pid/workspaces` → returns a new workspace stub
+  - WebSocket `WS /api/projects/:pid/workspaces/:wid/terminals/:tid` →
+    in-process echo handler that prints a welcome banner and echoes input; no
+    system processes are spawned
+  - `POST /api/projects/:pid/workspaces/:wid/terminals` → returns
+    `{ terminalId: "demo-term" }`
 - Update `LoginPage` in demo mode: replace the password form from Phase 1.4 with
-  a "Try Demo" button that navigates directly to `WorkspaceListPage` (no
+  a "Try Demo" button that navigates directly to `ProjectListPage` (no
   password prompt needed once the full flow is wired up)
 
 **Per-PR Cloudflare Pages deployment** is already active from Phase 1.4 — this
@@ -257,12 +274,13 @@ phase's changes will automatically trigger a preview.
 
 1. `VITE_DEMO_MODE=true npm run build` produces a static bundle with no server
    dependency.
-2. `npm run preview` shows the demo banner and the full flow (login → workspace
-   list → open terminal → interactive echo session) without any backend.
+2. `npm run preview` shows the demo banner and the full flow (login → project
+   list → workspace list → open terminal → interactive echo session) without any
+   backend.
 3. Cloudflare Pages posts a preview URL on the PR; the demo is accessible at
    `<preview-url>/demo/` alongside the documentation.
-4. Against a real server (no `VITE_DEMO_MODE`): login → workspace list → open
-   terminal → interactive shell session.
+4. Against a real server (no `VITE_DEMO_MODE`): login → project list →
+   workspace list → open terminal → interactive shell session.
 
 ### Phase 1 Deliverables
 
@@ -273,7 +291,8 @@ phase's changes will automatically trigger a preview.
 | `internal/config/` | Config loading |
 | `internal/auth/` | GitHub OAuth + session middleware |
 | `internal/templates/` | `html/template` files (embedded via `go:embed`) for the auth validation site |
-| `internal/workspace/` | Workspace registry |
+| `internal/project/` | Project registry |
+| `internal/workspace/` | Workspace store (in-memory, created at runtime) |
 | `internal/terminal/` | PTY session management |
 | `client/` | Vite + React + TypeScript SPA (bootstrapped in Phase 1.4) |
 | `client/src/mocks/` | MSW handlers and browser/server worker entry points (created in Phase 1.4) |
@@ -291,9 +310,11 @@ browser.
 
 Add to `internal/workspace/`:
 
-- `GET /api/workspaces/:id/files?path=<dir>` — returns a JSON list of directory
-  entries (name, type, size, modTime) for `path`; defaults to workspace root
-- `GET /api/workspaces/:id/file?path=<file>` — returns raw file contents
+- `GET /api/projects/:pid/workspaces/:wid/files?path=<dir>` — returns a JSON
+  list of directory entries (name, type, size, modTime) for `path`; defaults to
+  workspace root
+- `GET /api/projects/:pid/workspaces/:wid/file?path=<file>` — returns raw file
+  contents
 
 Both endpoints validate that the resolved path does not escape the workspace root
 (path-traversal protection).
@@ -304,14 +325,15 @@ paths outside the root return 400.
 ### 2.2 File Browser UI
 
 - `FileTree` component — collapsible tree loaded lazily one directory at a time
-  via `GET /api/workspaces/:id/files`
+  via `GET /api/projects/:pid/workspaces/:wid/files`
 - `FileViewer` component — displays file contents with syntax highlighting
   (`highlight.js`)
 - `WorkspacePage` — split layout: file tree on the left, viewer/terminal on the
   right; terminal from Phase 1 is accessible via a tab or panel
 - MSW handlers added/updated in `src/mocks/handlers.ts` for all new endpoints:
-  - `GET /api/workspaces/:id/files` → a small hard-coded directory tree
-  - `GET /api/workspaces/:id/file` → a few sample source files
+  - `GET /api/projects/:pid/workspaces/:wid/files` → a small hard-coded
+    directory tree
+  - `GET /api/projects/:pid/workspaces/:wid/file` → a few sample source files
 
 **Acceptance:** User can expand directories, click files, and read their contents.
 The terminal panel remains accessible. Demo build works end-to-end without a
@@ -338,13 +360,13 @@ chunks are reassembled correctly.
 - `internal/agent/` package
   - `Session` — holds conversation history (messages slice), in-flight cancel
     function, and status
-  - `Manager` — CRUD for sessions scoped to a workspace
+  - `Manager` — CRUD for sessions scoped to a workspace within a project
 - REST endpoints:
-  - `GET /api/workspaces/:id/sessions`
-  - `POST /api/workspaces/:id/sessions`
-  - `DELETE /api/workspaces/:id/sessions/:sid`
-  - `GET /api/workspaces/:id/sessions/:sid/messages`
-- WebSocket `WS /api/workspaces/:id/sessions/:sid/chat`
+  - `GET /api/projects/:pid/workspaces/:wid/sessions`
+  - `POST /api/projects/:pid/workspaces/:wid/sessions`
+  - `DELETE /api/projects/:pid/workspaces/:wid/sessions/:sid`
+  - `GET /api/projects/:pid/workspaces/:wid/sessions/:sid/messages`
+- WebSocket `WS /api/projects/:pid/workspaces/:wid/sessions/:sid/chat`
   - Accepts `user_message` frames
   - Runs agent turn: streams `assistant_chunk` frames; interleaves `tool_call` /
     `tool_result` frames for read-only tools (`read_file`, `list_files`)
@@ -364,11 +386,12 @@ receive a correct streamed answer.
   see what the agent is doing
 - Cancel button that sends `{ "type": "cancel" }` to the WebSocket
 - MSW handlers added/updated in `src/mocks/handlers.ts` for all new endpoints:
-  - `GET /api/workspaces/:id/sessions` → empty list initially
-  - `POST /api/workspaces/:id/sessions` → returns a new session stub
-  - WebSocket `WS /api/workspaces/:id/sessions/:sid/chat` → scripted handler
-    that emits a fixed sequence of `assistant_chunk` frames followed by
-    `assistant_done`, simulating a real streaming turn
+  - `GET /api/projects/:pid/workspaces/:wid/sessions` → empty list initially
+  - `POST /api/projects/:pid/workspaces/:wid/sessions` → returns a new session
+    stub
+  - WebSocket `WS /api/projects/:pid/workspaces/:wid/sessions/:sid/chat` →
+    scripted handler that emits a fixed sequence of `assistant_chunk` frames
+    followed by `assistant_done`, simulating a real streaming turn
 
 **Acceptance:** Full conversational loop visible in the browser; streaming text
 appears word-by-word. Demo build works end-to-end without a backend.
@@ -386,21 +409,21 @@ accepts or rejects them before any file is written to disk.
 - `write_file` agent tool — diffs proposed content against current file, stores
   as `PendingChange`, emits `change_proposed` WebSocket frame
 - REST endpoints:
-  - `GET /api/workspaces/:id/sessions/:sid/changes`
-  - `POST /api/workspaces/:id/sessions/:sid/changes/:cid/accept` — atomically
-    writes file and marks change accepted
-  - `POST /api/workspaces/:id/sessions/:sid/changes/:cid/reject` — marks change
-    rejected without touching the file
+  - `GET /api/projects/:pid/workspaces/:wid/sessions/:sid/changes`
+  - `POST /api/projects/:pid/workspaces/:wid/sessions/:sid/changes/:cid/accept`
+    — atomically writes file and marks change accepted
+  - `POST /api/projects/:pid/workspaces/:wid/sessions/:sid/changes/:cid/reject`
+    — marks change rejected without touching the file
 
 **Acceptance:** Agent proposes a change; the in-memory store holds it; accept
 endpoint writes the file.
 
 ### 4.2 Git Status & Diff API
 
-- `GET /api/workspaces/:id/git/status` — runs `git status --porcelain` and
-  returns structured JSON
-- `GET /api/workspaces/:id/git/diff?path=` — returns unified diff for the given
-  path (or all changes if path omitted)
+- `GET /api/projects/:pid/workspaces/:wid/git/status` — runs
+  `git status --porcelain` and returns structured JSON
+- `GET /api/projects/:pid/workspaces/:wid/git/diff?path=` — returns unified diff
+  for the given path (or all changes if path omitted)
 
 **Acceptance:** After accepting a change, `git/status` reflects the modification.
 
@@ -412,12 +435,13 @@ endpoint writes the file.
 - Accept / Reject buttons per pending change
 - `ChangesPanel` listing all pending changes for the session
 - MSW handlers added/updated in `src/mocks/handlers.ts` for all new endpoints:
-  - `GET /api/workspaces/:id/sessions/:sid/changes` → one pre-seeded pending
-    change that modifies a file in the demo file tree
+  - `GET /api/projects/:pid/workspaces/:wid/sessions/:sid/changes` → one
+    pre-seeded pending change that modifies a file in the demo file tree
   - `POST …/changes/:cid/accept` and `…/changes/:cid/reject` → success stubs
-  - `GET /api/workspaces/:id/git/status` → single modified file matching the
-    pending change
-  - `GET /api/workspaces/:id/git/diff` → a small hard-coded unified diff
+  - `GET /api/projects/:pid/workspaces/:wid/git/status` → single modified file
+    matching the pending change
+  - `GET /api/projects/:pid/workspaces/:wid/git/diff` → a small hard-coded
+    unified diff
 
 **Acceptance:** User can trigger a file edit via chat, review the diff, and accept
 or reject it. File tree updates after acceptance. Demo build works end-to-end
@@ -446,13 +470,13 @@ without a backend.
 ### 5.3 Manual File Editor
 
 - `FileEditor` component — contenteditable / textarea-based minimal editor
-  loaded from `GET /api/workspaces/:id/file`
-- `PUT /api/workspaces/:id/file?path=` — saves file contents directly (bypasses
-  pending-change flow; immediate write)
+  loaded from `GET /api/projects/:pid/workspaces/:wid/file`
+- `PUT /api/projects/:pid/workspaces/:wid/file?path=` — saves file contents
+  directly (bypasses pending-change flow; immediate write)
 - Dirty-state indicator; confirm before discarding unsaved changes
 - MSW handler added/updated in `src/mocks/handlers.ts`:
-  - `PUT /api/workspaces/:id/file` → success stub; in demo mode the edit is
-    visible within the session but nothing is persisted
+  - `PUT /api/projects/:pid/workspaces/:wid/file` → success stub; in demo mode
+    the edit is visible within the session but nothing is persisted
 
 **Acceptance:** User can open a file, edit it, save it, and see the change
 reflected in `git/status`. Demo build works end-to-end without a backend.
@@ -622,7 +646,7 @@ Phase 1 is a hard prerequisite for everything else because it establishes:
 
 - The Go module and server structure all other packages plug into
 - The authentication middleware that guards every API route
-- The workspace registry that scopes all subsequent resources
+- The project registry and workspace store that scope all subsequent resources
 - The client shell and build pipeline that all UI components extend
 
 ---
