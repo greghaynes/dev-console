@@ -22,8 +22,12 @@ const PROJECTS = [
     repo: 'myorg/my-project',
     language: 'Go',
     lastUsed: '2h ago',
-    workspaces: 3,
     activity: 'active' as const,
+    workspaces: [
+      { id: 'main', name: 'main', branch: 'main', pr: null, lastUsed: '2h ago' },
+      { id: 'feature-auth', name: 'feature-auth', branch: 'feature/auth', pr: '#42: Add JWT authentication', lastUsed: '1d ago' },
+      { id: 'fix-logging', name: 'fix-logging', branch: 'fix/logging', pr: '#45: Fix structured logging', lastUsed: '4d ago' },
+    ],
   },
   {
     id: 'backend-api',
@@ -31,8 +35,10 @@ const PROJECTS = [
     repo: 'myorg/backend-api',
     language: 'Go',
     lastUsed: '1d ago',
-    workspaces: 1,
     activity: 'idle' as const,
+    workspaces: [
+      { id: 'main', name: 'main', branch: 'main', pr: null, lastUsed: '1d ago' },
+    ],
   },
   {
     id: 'frontend-app',
@@ -40,8 +46,11 @@ const PROJECTS = [
     repo: 'myorg/frontend-app',
     language: 'TypeScript',
     lastUsed: '3d ago',
-    workspaces: 2,
     activity: 'idle' as const,
+    workspaces: [
+      { id: 'main', name: 'main', branch: 'main', pr: null, lastUsed: '3d ago' },
+      { id: 'feat-dark', name: 'feat-dark', branch: 'feat/dark-mode', pr: '#31: Dark mode', lastUsed: '3d ago' },
+    ],
   },
   {
     id: 'docs',
@@ -49,15 +58,11 @@ const PROJECTS = [
     repo: 'myorg/docs',
     language: 'Markdown',
     lastUsed: '1w ago',
-    workspaces: 1,
     activity: 'idle' as const,
+    workspaces: [
+      { id: 'main', name: 'main', branch: 'main', pr: null, lastUsed: '1w ago' },
+    ],
   },
-]
-
-const WORKSPACES = [
-  { id: 'main', name: 'main', branch: 'main', pr: null, lastUsed: '2h ago' },
-  { id: 'feature-auth', name: 'feature-auth', branch: 'feature/auth', pr: '#42: Add JWT authentication', lastUsed: '1d ago' },
-  { id: 'fix-logging', name: 'fix-logging', branch: 'fix/logging', pr: '#45: Fix structured logging', lastUsed: '4d ago' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -80,6 +85,17 @@ const LANG_COLORS: Record<string, string> = {
   Go: '#00acd7',
   TypeScript: '#3178c6',
   Markdown: '#7c3aed',
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard accessibility helper
+// ---------------------------------------------------------------------------
+
+function activateOnKeyboard(e: React.KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).click()
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +249,7 @@ function ProjectTile({
       role="button"
       tabIndex={0}
       aria-label={`Open project ${project.name}`}
+      onKeyDown={activateOnKeyboard}
     >
       <div style={s.topRow}>
         <div>
@@ -247,7 +264,7 @@ function ProjectTile({
       <div style={s.bottomRow}>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <span style={s.meta}>Last used {project.lastUsed}</span>
-          <span style={s.wsBadge}>⎇ {project.workspaces} workspaces</span>
+          <span style={s.wsBadge}>⎇ {project.workspaces.length} workspaces</span>
         </div>
         <button style={s.openBtn} onClick={e => { e.stopPropagation(); onSelect(project) }}>
           Open ›
@@ -352,7 +369,7 @@ function WorkspacePanel({
           <button style={s.newWsBtn}>+ New</button>
         </div>
         <div style={s.list}>
-          {WORKSPACES.map(ws => (
+          {project.workspaces.map(ws => (
             <div
               key={ws.id}
               style={wsCardStyle(wsHover === ws.id)}
@@ -461,6 +478,7 @@ export default function VariantB() {
             role="button"
             tabIndex={0}
             aria-label="Add new project"
+            onKeyDown={activateOnKeyboard}
           >
             <span style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>＋</span>
             <span>Add a project</span>

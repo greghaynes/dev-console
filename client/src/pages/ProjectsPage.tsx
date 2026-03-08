@@ -100,12 +100,23 @@ const LANG_COLORS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
+// Keyboard accessibility helper
+// ---------------------------------------------------------------------------
+
+function activateOnKeyboard(e: React.KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).click()
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Responsive hook
 // ---------------------------------------------------------------------------
 
 function useIsDesktop(): boolean {
   const [isDesktop, setIsDesktop] = useState(
-    () => window.matchMedia('(min-width: 768px)').matches,
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches,
   )
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)')
@@ -235,14 +246,14 @@ function AddProjectDialog({ onClose }: { onClose: () => void }) {
           <button style={s.closeBtn} onClick={onClose} aria-label="Close dialog">✕</button>
         </div>
         <hr style={s.divider} />
-        <label style={s.label}>Select a repository</label>
+        <label style={s.label} htmlFor="projects-page-repo-filter">Select a repository</label>
         <input
+          id="projects-page-repo-filter"
           type="search"
           placeholder="🔍 Filter repositories…"
           value={filter}
           onChange={e => setFilter(e.target.value)}
           style={s.filterInput}
-          aria-label="Filter repositories"
         />
         <div style={s.repoList}>
           {filtered.map((repo, i) => (
@@ -378,6 +389,7 @@ function ProjectTableRow({ project }: { project: typeof PROJECTS[0] }) {
         tabIndex={0}
         aria-expanded={expanded}
         aria-label={`${project.name}: ${expanded ? 'collapse' : 'expand'} workspaces`}
+        onKeyDown={activateOnKeyboard}
       >
         <span style={s.chevron}>›</span>
         <span style={s.name}>{project.name}</span>
@@ -578,6 +590,7 @@ function ProjectCard({ project }: { project: typeof PROJECTS[0] }) {
       role="button"
       tabIndex={0}
       aria-label={`Open project ${project.name}`}
+      onKeyDown={activateOnKeyboard}
     >
       <div style={s.left}>
         <span style={s.name}>{project.name}</span>

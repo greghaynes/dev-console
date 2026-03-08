@@ -43,6 +43,17 @@ const C = {
 }
 
 // ---------------------------------------------------------------------------
+// Keyboard accessibility helper
+// ---------------------------------------------------------------------------
+
+function activateOnKeyboard(e: React.KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).click()
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -162,6 +173,7 @@ function ProjectCard({ project }: { project: typeof PROJECTS[0] }) {
       role="button"
       tabIndex={0}
       aria-label={`Open project ${project.name}`}
+      onKeyDown={activateOnKeyboard}
     >
       <div style={s.left}>
         <span style={s.name}>{project.name}</span>
@@ -295,14 +307,14 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
           <button style={s.closeBtn} onClick={onClose} aria-label="Close dialog">✕</button>
         </div>
         <hr style={s.divider} />
-        <label style={s.label}>Select a repository</label>
+        <label style={s.label} htmlFor="variant-a-repo-filter">Select a repository</label>
         <input
+          id="variant-a-repo-filter"
           type="search"
           placeholder="🔍 Filter repositories…"
           value={filter}
           onChange={e => setFilter(e.target.value)}
           style={s.filterInput}
-          aria-label="Filter repositories"
         />
         <div style={s.repoList}>
           {filtered.map((repo, i) => (

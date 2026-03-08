@@ -86,6 +86,17 @@ const LANG_COLORS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
+// Keyboard accessibility helper
+// ---------------------------------------------------------------------------
+
+function activateOnKeyboard(e: React.KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).click()
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -257,6 +268,7 @@ function ProjectRow({ project }: { project: typeof PROJECTS[0] }) {
         tabIndex={0}
         aria-expanded={expanded}
         aria-label={`${project.name}: ${expanded ? 'collapse' : 'expand'} workspaces`}
+        onKeyDown={activateOnKeyboard}
       >
         <span style={s.chevron}>›</span>
         <span style={s.name}>{project.name}</span>
