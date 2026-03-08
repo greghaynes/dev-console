@@ -56,7 +56,7 @@ the user lands back on the server with a valid session cookie. A user not on the
 allowlist sees a 403. A `/api/whoami` endpoint returns `{ login, id }` for the
 authenticated user.
 
-### 1.3 Auth Validation Site
+### 1.3 Auth Validation Site ✅
 
 A minimal server-rendered HTML site (no external JS dependencies) served directly
 by the Go backend to allow manual testing and validation of the auth system before
