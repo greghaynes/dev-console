@@ -10,9 +10,9 @@
 name = "dev-console"
 compatibility_date = "2024-09-25"
 
-# Build the Hugo site before deploying.
+# Build the Hugo site and React demo SPA before deploying.
 [build]
-command = "make site-build"
+command = "make site-build-with-demo"
 
 # Serve the Hugo-generated static files as Workers Static Assets.
 [assets]

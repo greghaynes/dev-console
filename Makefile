@@ -35,8 +35,8 @@ site-build:
 	cd site && hugo --minify
 
 # Build the documentation site together with the frontend demo (if client/ exists).
-# This is the Cloudflare Pages build command: set output directory to site/public.
-# Cloudflare Pages project settings must include VITE_DEMO_MODE=true and NODE_VERSION=22.
+# This is the Cloudflare Workers build command (used in wrangler.toml).
+# Requires Node.js 22+ in the build environment (set NODE_VERSION=22 in CF project settings).
 site-build-with-demo:
 	@if [ -d "client" ] && [ -f "client/package.json" ]; then \
 		set -e; \
