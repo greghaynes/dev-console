@@ -25,6 +25,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   replace `typeof PROJECTS[0]` and `typeof REPOS[0]` inline types throughout
   the file.
 
+### Added — Phase 1.5: SPA GitHub OAuth Login
+
+- `client/src/context/AuthContext.tsx` — `AuthProvider` component and `useAuth`
+  hook; calls `GET /api/whoami` once on mount and exposes `{ user, loading }` to
+  the component tree.
+- Updated `client/src/App.tsx`: wrapped in `<AuthProvider>`; added `RootRoute`
+  (auth-aware redirect logic at `/`) and `AuthGuard` (protects `/projects`);
+  removed unused `/demo` catch-all route.
+- Updated `client/src/pages/LoginPage.tsx`: demo mode now shows a single
+  "Try Demo" button that navigates directly to `/projects` (removes the
+  password form from Phase 1.4).
+
 ### Added — Phase 1.3: Auth Validation Site
 
 - `internal/templates/` package with embedded `html/template` files
