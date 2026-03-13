@@ -180,7 +180,7 @@ guard in `make site-build-with-demo` is a no-op and only the Hugo docs are deplo
 3. Cloudflare Pages posts a preview URL on the PR; the demo is accessible at
    `<preview-url>/demo/` alongside the documentation.
 
-### 1.5 SPA GitHub OAuth Login *(parallel with 1.6)*
+### 1.5 SPA GitHub OAuth Login *(parallel with 1.6)* ✅
 
 Connects the React SPA to the existing GitHub OAuth backend (Phase 1.2) and
 gates protected pages behind authenticated sessions. Phases 1.5 and 1.6 are
