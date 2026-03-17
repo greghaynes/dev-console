@@ -32,6 +32,38 @@ const workspaces: Record<string, Array<{ id: string; projectId: string; name: st
 }
 
 // ---------------------------------------------------------------------------
+// Demo file system fixture
+// ---------------------------------------------------------------------------
+
+// A small hard-coded directory tree used by the file API demo handlers.
+type DemoEntry = { name: string; type: 'file' | 'dir'; size: number; modTime: string }
+
+const demoFiles: Record<string, DemoEntry[]> = {
+  '': [
+    { name: 'README.md', type: 'file', size: 512, modTime: '2024-01-01T00:00:00Z' },
+    { name: 'src', type: 'dir', size: 0, modTime: '2024-01-01T00:00:00Z' },
+    { name: 'package.json', type: 'file', size: 256, modTime: '2024-01-01T00:00:00Z' },
+  ],
+  'src': [
+    { name: 'main.ts', type: 'file', size: 1024, modTime: '2024-01-01T00:00:00Z' },
+    { name: 'utils.ts', type: 'file', size: 512, modTime: '2024-01-01T00:00:00Z' },
+    { name: 'components', type: 'dir', size: 0, modTime: '2024-01-01T00:00:00Z' },
+  ],
+  'src/components': [
+    { name: 'App.tsx', type: 'file', size: 2048, modTime: '2024-01-01T00:00:00Z' },
+    { name: 'Button.tsx', type: 'file', size: 768, modTime: '2024-01-01T00:00:00Z' },
+  ],
+}
+
+const demoFileContents: Record<string, string> = {
+  'README.md': `# Demo Project\n\nThis is a demo workspace for Dev Console.\n\n## Getting Started\n\n\`\`\`bash\nnpm install\nnpm start\n\`\`\`\n`,
+  'package.json': `{\n  "name": "demo-project",\n  "version": "1.0.0",\n  "scripts": {\n    "start": "ts-node src/main.ts",\n    "build": "tsc"\n  },\n  "dependencies": {\n    "typescript": "^5.0.0"\n  }\n}\n`,
+  'src/main.ts': `import { greet } from './utils'\n\nconst name = process.env.NAME ?? 'world'\nconsole.log(greet(name))\n`,
+  'src/utils.ts': `/**\n * Returns a greeting message for the given name.\n */\nexport function greet(name: string): string {\n  return \`Hello, \${name}!\`\n}\n`,
+  'src/components/App.tsx': `import React from 'react'\nimport { Button } from './Button'\n\nexport function App() {\n  return (\n    <div className="app">\n      <h1>Demo App</h1>\n      <Button label="Click me" onClick={() => alert('Hello!')} />\n    </div>\n  )\n}\n`,
+  'src/components/Button.tsx': `import React from 'react'\n\ninterface ButtonProps {\n  label: string\n  onClick: () => void\n}\n\nexport function Button({ label, onClick }: ButtonProps) {\n  return <button onClick={onClick}>{label}</button>\n}\n`,
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket terminal handler (covers both ws:// and wss://)
 // ---------------------------------------------------------------------------
@@ -147,6 +179,26 @@ export const handlers = [
 
   http.post('/api/projects/:pid/workspaces/:wid/terminals', () => {
     return HttpResponse.json({ terminalId: 'demo-term' }, { status: 201 })
+  }),
+
+  // File API handlers (Phase 2.1).
+  http.get('/api/projects/:pid/workspaces/:wid/files', ({ request }) => {
+    const url = new URL(request.url)
+    const path = url.searchParams.get('path') ?? ''
+    const entries = demoFiles[path]
+    if (entries === undefined) return new HttpResponse('path not found', { status: 404 })
+    return HttpResponse.json(entries)
+  }),
+
+  http.get('/api/projects/:pid/workspaces/:wid/file', ({ request }) => {
+    const url = new URL(request.url)
+    const path = url.searchParams.get('path') ?? ''
+    if (!path) return new HttpResponse('path query parameter is required', { status: 400 })
+    const content = demoFileContents[path]
+    if (content === undefined) return new HttpResponse('file not found', { status: 404 })
+    return new HttpResponse(content, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
   }),
 
   http.get('/api/github/repos', () => {

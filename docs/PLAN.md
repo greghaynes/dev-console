@@ -491,7 +491,7 @@ phase's changes will automatically trigger a preview.
 **Goal:** Users can browse the workspace file tree and read file contents in the
 browser.
 
-### 2.1 File API
+### 2.1 File API ✅
 
 Add to `internal/workspace/`:
 
@@ -507,7 +507,7 @@ Both endpoints validate that the resolved path does not escape the workspace roo
 **Acceptance:** `curl` returns directory listings and file contents; requests for
 paths outside the root return 400.
 
-### 2.2 File Browser UI
+### 2.2 File Browser UI ✅
 
 - `FileTree` component — collapsible tree loaded lazily one directory at a time
   via `GET /api/projects/:pid/workspaces/:wid/files`

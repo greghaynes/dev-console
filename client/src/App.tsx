@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import ProjectsPage from './pages/ProjectsPage'
 import WorkspaceListPage from './pages/WorkspaceListPage'
+import WorkspacePage from './pages/WorkspacePage'
 import TerminalPage from './pages/TerminalPage'
 import DemoBanner from './components/DemoBanner'
 import WireframesIndex from './pages/wireframes/WireframesIndex'
@@ -60,6 +61,14 @@ export default function App() {
             element={
               <AuthGuard>
                 <WorkspaceListPage />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/projects/:pid/workspaces/:wid"
+            element={
+              <AuthGuard>
+                <WorkspacePage />
               </AuthGuard>
             }
           />
