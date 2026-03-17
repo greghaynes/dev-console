@@ -21,6 +21,7 @@ import (
 	"github.com/greghaynes/dev-console/internal/config"
 	"github.com/greghaynes/dev-console/internal/project"
 	"github.com/greghaynes/dev-console/internal/templates"
+	"github.com/greghaynes/dev-console/internal/terminal"
 	"github.com/greghaynes/dev-console/internal/workspace"
 )
 
@@ -44,11 +45,13 @@ func run() error {
 	router := buildRouter(cfg)
 
 	srv := &http.Server{
-		Addr:         cfg.Server.ListenAddr,
-		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:    cfg.Server.ListenAddr,
+		Handler: router,
+		// ReadTimeout and WriteTimeout are intentionally generous to support
+		// long-lived WebSocket connections (terminal sessions).
+		ReadTimeout:  0,
+		WriteTimeout: 0,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	// Start the server in a background goroutine so we can listen for signals.
@@ -127,11 +130,13 @@ func buildRouter(cfg *config.Config) *mux.Router {
 	// Project and workspace management (Phase 1.7).
 	pm := project.NewManager(cfg.Storage.ProjectsDir)
 	wm := workspace.NewManager()
+	tm := terminal.NewManager()
 
 	project.RegisterRoutes(api, pm, func(projectID string) error {
 		return wm.DeleteAll(projectID)
 	})
 	workspace.RegisterRoutes(api, wm, pm)
+	terminal.RegisterRoutes(api, tm, wm, pm)
 
 	return r
 }

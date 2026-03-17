@@ -387,7 +387,7 @@ type Workspace struct {
 8. `POST /api/projects/:pid/workspaces` with a missing `branch` returns 400;
    an unknown `:pid` returns 404.
 
-### 1.8 Terminal Backend
+### 1.8 Terminal Backend ✅
 
 - `internal/terminal/` package
   - `Session` — wraps a `creack/pty` PTY + `exec.Cmd` (shell) + mutex-protected
