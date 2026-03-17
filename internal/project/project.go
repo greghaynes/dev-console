@@ -137,3 +137,25 @@ func nameFromURL(repoURL string) string {
 	// filepath.Base works on URL paths too since URLs use '/'.
 	return filepath.Base(repoURL)
 }
+
+// RegisterForTest inserts an already-existing local git checkout as a project
+// record without performing URL-format validation or a git clone.  This is
+// intended for use in package tests to pre-populate the manager with a project
+// that points at a temporary local repository, bypassing the GitHub URL
+// requirement and any network calls.
+//
+// The calling test is responsible for creating the directory at rootPath before
+// calling this function.
+func (m *Manager) RegisterForTest(id, name, repoURL, rootPath string) *Project {
+	p := &Project{
+		ID:        id,
+		Name:      name,
+		RepoURL:   repoURL,
+		RootPath:  rootPath,
+		CreatedAt: time.Now().UTC(),
+	}
+	m.mu.Lock()
+	m.projects[id] = p
+	m.mu.Unlock()
+	return p
+}
