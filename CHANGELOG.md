@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Phase 1.8: Terminal Backend
+
+- `internal/terminal/` package: `Session` struct wrapping a `creack/pty` PTY +
+  `exec.Cmd` (shell) with `Resize` and `Close` methods; thread-safe `Manager`
+  with `Create`, `Get`, and `Delete` operations keyed by `(projectID, workspaceID, id)`.
+- Shell process starts with `cwd` set to the workspace worktree root and
+  `TERM=xterm-256color` in its environment; shell binary is resolved from the
+  `$SHELL` environment variable with `/bin/bash` and `/bin/sh` fallbacks.
+- REST endpoints (behind `RequireAuth`):
+  - `POST /api/projects/:pid/workspaces/:wid/terminals` — creates a terminal
+    session and returns `{ "terminalId": "<id>" }` with HTTP 201; 404 if the
+    project or workspace is unknown; 502 if PTY creation fails.
+  - `DELETE /api/projects/:pid/workspaces/:wid/terminals/:tid` — closes the
+    PTY, terminates the shell process, and removes the session; returns 204 on
+    success, 404 if not found.
+- WebSocket endpoint `WS /api/projects/:pid/workspaces/:wid/terminals/:tid`:
+  - Text frames containing `{ "type": "resize", "cols": N, "rows": N }` are
+    applied as `TIOCSWINSZ` ioctls; all other text and binary frames are written
+    directly to PTY stdin.
+  - PTY stdout is pumped to the client as binary WebSocket frames.
+  - The session is removed from the manager when the WebSocket closes.
+- `gorilla/websocket v1.5.3` and `creack/pty v1.1.24` added as dependencies.
+- HTTP server `ReadTimeout` and `WriteTimeout` set to `0` (no per-connection
+  timeout) to support long-lived WebSocket terminal sessions; `IdleTimeout`
+  extended to 120 s.
+
 ### Added — Phase 1.7: Project and Workspace Registration
 
 - `internal/slug/` package: `Generate(input, exists)` helper that produces
