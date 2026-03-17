@@ -1,16 +1,16 @@
 /**
- * ProjectsPage — responsive project-selection wireframe.
+ * ProjectsPage — responsive project-selection page.
  *
- * On desktop (≥ 768 px): Variant C — compact table with search filter and
- * in-place accordion workspace expansion.
- * On mobile (< 768 px):  Variant A — classic full-width card list with a
- * centred "Add Project" modal.
+ * On desktop (≥ 768 px): compact table with search filter; clicking a project
+ * row navigates to the WorkspaceListPage for that project.
+ * On mobile (< 768 px): classic full-width card list; tapping a card navigates
+ * to the WorkspaceListPage.
  *
- * Both views share the same mock data and colour tokens so the page can be
- * dropped into a functional implementation later without structural changes.
+ * Both views share the same data and colour tokens.
  */
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 // ---------------------------------------------------------------------------
 // API types
@@ -36,13 +36,6 @@ interface ApiRepo {
 // UI types
 // ---------------------------------------------------------------------------
 
-interface UiWorkspace {
-  id: string
-  branch: string
-  pr: string | null
-  lastUsed: string
-}
-
 interface UiProject {
   id: string
   name: string
@@ -51,7 +44,6 @@ interface UiProject {
   language: string
   lastUsed: string
   lastUsedFull: string
-  workspaces: UiWorkspace[]
 }
 
 function toUiProject(p: ApiProject): UiProject {
@@ -72,7 +64,6 @@ function toUiProject(p: ApiProject): UiProject {
     language: '',
     lastUsed: new Date(p.createdAt).toLocaleDateString(),
     lastUsedFull: new Date(p.createdAt).toLocaleString(),
-    workspaces: [],
   }
 }
 
@@ -84,7 +75,6 @@ const C = {
   bg: '#0f172a',
   surface: '#1e293b',
   surfaceHover: '#263348',
-  expanded: '#162036',
   border: '#334155',
   text: '#f1f5f9',
   muted: '#94a3b8',
@@ -350,57 +340,9 @@ function AddProjectDialog({ onClose, onAdd }: { onClose: () => void; onAdd: () =
 // Desktop view (Variant C)
 // ---------------------------------------------------------------------------
 
-function WorkspaceRow({ ws }: { ws: UiWorkspace }) {
-  const [hover, setHover] = useState(false)
-  const s: Record<string, React.CSSProperties> = {
-    row: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.75rem',
-      padding: '0.625rem 1rem 0.625rem 3.5rem',
-      background: hover ? '#1a2940' : 'transparent',
-      borderTop: `1px solid ${C.border}`,
-      cursor: 'pointer',
-      transition: 'background 0.15s',
-    },
-    branchIcon: { color: C.muted, fontSize: '0.875rem', flexShrink: 0 },
-    branch: { fontFamily: 'monospace', fontSize: '0.8125rem', flex: 1 },
-    pr: { fontSize: '0.8125rem', color: C.blueLight },
-    lastUsed: { fontSize: '0.75rem', color: C.muted, marginRight: '0.5rem' },
-    openBtn: {
-      padding: '0.25rem 0.75rem',
-      borderRadius: '0.25rem',
-      border: `1px solid ${C.border}`,
-      background: 'transparent',
-      color: C.text,
-      fontSize: '0.75rem',
-      fontWeight: 600,
-      cursor: 'pointer',
-      whiteSpace: 'nowrap',
-    },
-  }
-  return (
-    <div
-      style={s.row}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
-      <span style={s.branchIcon}>⎇</span>
-      <span style={s.branch}>{ws.branch}</span>
-      {ws.pr
-        ? <span style={s.pr}>PR {ws.pr}</span>
-        : <span style={{ ...s.pr, color: C.muted }}>–</span>}
-      <span style={s.lastUsed}>{ws.lastUsed}</span>
-      <button style={s.openBtn}>Open ›</button>
-    </div>
-  )
-}
-
 function ProjectTableRow({ project }: { project: UiProject }) {
-  const [expanded, setExpanded] = useState(false)
+  const navigate = useNavigate()
   const [hover, setHover] = useState(false)
-
-  const rowBg = expanded ? C.expanded : hover ? C.surfaceHover : 'transparent'
 
   const s: Record<string, React.CSSProperties> = {
     wrapper: { borderBottom: `1px solid ${C.border}` },
@@ -409,15 +351,13 @@ function ProjectTableRow({ project }: { project: UiProject }) {
       alignItems: 'center',
       gap: '0.875rem',
       padding: '0.875rem 1rem',
-      background: rowBg,
+      background: hover ? C.surfaceHover : 'transparent',
       cursor: 'pointer',
       transition: 'background 0.15s',
     },
     chevron: {
       fontSize: '0.875rem',
       color: C.muted,
-      transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
-      transition: 'transform 0.2s',
       flexShrink: 0,
       width: '1.25rem',
       textAlign: 'center',
@@ -433,14 +373,6 @@ function ProjectTableRow({ project }: { project: UiProject }) {
     },
     lang: { fontSize: '0.8125rem', color: C.muted, minWidth: '5rem' },
     lastUsed: { fontSize: '0.8125rem', color: C.muted, minWidth: '7rem', textAlign: 'right' },
-    wsCount: {
-      padding: '0.125rem 0.5rem',
-      borderRadius: '9999px',
-      background: '#1e3a5f',
-      color: C.blueLight,
-      fontSize: '0.75rem',
-      fontWeight: 500,
-    },
   }
   return (
     <div style={s.wrapper}>
@@ -448,11 +380,10 @@ function ProjectTableRow({ project }: { project: UiProject }) {
         style={s.row}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
-        onClick={() => setExpanded(x => !x)}
+        onClick={() => navigate(`/projects/${project.id}/workspaces`)}
         role="button"
         tabIndex={0}
-        aria-expanded={expanded}
-        aria-label={`${project.name}: ${expanded ? 'collapse' : 'expand'} workspaces`}
+        aria-label={`Open workspaces for ${project.name}`}
         onKeyDown={activateOnKeyboard}
       >
         <span style={s.chevron}>›</span>
@@ -460,12 +391,8 @@ function ProjectTableRow({ project }: { project: UiProject }) {
         <span style={s.repo}>github.com/{project.repo}</span>
         <span style={s.langDot} />
         <span style={s.lang}>{project.language}</span>
-        <span style={s.wsCount}>{project.workspaces.length} ws</span>
         <span style={s.lastUsed}>{project.lastUsedFull}</span>
       </div>
-      {expanded && project.workspaces.map(ws => (
-        <WorkspaceRow key={ws.id} ws={ws} />
-      ))}
     </div>
   )
 }
@@ -592,8 +519,7 @@ function DesktopView({ onNewProject, projects }: { onNewProject: () => void; pro
             <span style={{ ...s.col, flex: '0 0 auto', minWidth: '10rem' }}>Project</span>
             <span style={{ ...s.col, flex: 1 }}>Repository</span>
             <span style={{ ...s.col, minWidth: '5rem' }}>Language</span>
-            <span style={{ ...s.col, minWidth: '4rem' }}>WS</span>
-            <span style={{ ...s.col, minWidth: '7rem', textAlign: 'right' }}>Last Used</span>
+            <span style={{ ...s.col, minWidth: '7rem', textAlign: 'right' }}>Created</span>
           </div>
           {filtered.length === 0 ? (
             <div style={s.emptyRow}>No projects match "{query}"</div>
@@ -601,7 +527,7 @@ function DesktopView({ onNewProject, projects }: { onNewProject: () => void; pro
             filtered.map(p => <ProjectTableRow key={p.id} project={p} />)
           )}
         </div>
-        <p style={s.hint}>Click a row to expand its workspaces. Click again to collapse.</p>
+        <p style={s.hint}>Click a row to open its workspaces.</p>
       </main>
     </>
   )
@@ -612,6 +538,7 @@ function DesktopView({ onNewProject, projects }: { onNewProject: () => void; pro
 // ---------------------------------------------------------------------------
 
 function ProjectCard({ project }: { project: UiProject }) {
+  const navigate = useNavigate()
   const [hover, setHover] = useState(false)
   const s: Record<string, React.CSSProperties> = {
     card: {
@@ -651,9 +578,10 @@ function ProjectCard({ project }: { project: UiProject }) {
       style={s.card}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onClick={() => navigate(`/projects/${project.id}/workspaces`)}
       role="button"
       tabIndex={0}
-      aria-label={`Open project ${project.name}`}
+      aria-label={`Open workspaces for ${project.name}`}
       onKeyDown={activateOnKeyboard}
     >
       <div style={s.left}>
@@ -661,7 +589,7 @@ function ProjectCard({ project }: { project: UiProject }) {
         <span style={s.repo}>{project.repoDisplay}</span>
       </div>
       <div style={s.right}>
-        <span style={s.lastUsed}>Last used: {project.lastUsed}</span>
+        <span style={s.lastUsed}>Created: {project.lastUsed}</span>
         <div style={s.chevron}>›</div>
       </div>
     </div>

@@ -8,3 +8,8 @@ dev-console.yaml
 # Go test cache and coverage output
 *.test
 *.out
+
+# Compiled SPA embedded in the server binary (populated by `make build`)
+# Only the .gitkeep placeholder is tracked.
+internal/spa/dist/*
+!internal/spa/dist/.gitkeep

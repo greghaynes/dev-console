@@ -76,7 +76,7 @@ func TestLogoutHandler_ClearsCookieAndRedirects(t *testing.T) {
 
 // --- RequireAuth middleware ---
 
-func TestRequireAuth_NoCookie_RedirectsToLogin(t *testing.T) {
+func TestRequireAuth_NoCookie_Returns401(t *testing.T) {
 	h := auth.NewHandler(testConfig("alice"))
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -87,11 +87,8 @@ func TestRequireAuth_NoCookie_RedirectsToLogin(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.RequireAuth(inner).ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusFound {
-		t.Fatalf("status = %d, want %d", rr.Code, http.StatusFound)
-	}
-	if loc := rr.Header().Get("Location"); loc != "/login" {
-		t.Errorf("Location = %q, want /login", loc)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusUnauthorized)
 	}
 }
 
@@ -140,7 +137,7 @@ func TestRequireAuth_ValidCookie_CallsNext(t *testing.T) {
 	}
 }
 
-func TestRequireAuth_ExpiredCookie_Redirects(t *testing.T) {
+func TestRequireAuth_ExpiredCookie_Returns401(t *testing.T) {
 	cfg := testConfig("alice")
 	// Build a cookie that expires immediately.
 	cfg.SessionTTL = "-1s"
@@ -157,8 +154,8 @@ func TestRequireAuth_ExpiredCookie_Redirects(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.RequireAuth(inner).ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusFound {
-		t.Fatalf("status = %d, want %d (expected redirect for expired token)", rr.Code, http.StatusFound)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d (expected 401 for expired token)", rr.Code, http.StatusUnauthorized)
 	}
 }
 

@@ -406,7 +406,7 @@ type Workspace struct {
 **Acceptance:** `websocat` or a small test harness can attach to the WebSocket,
 send resize + input, and receive shell output.
 
-### 1.9 Minimal Web Client
+### 1.9 Minimal Web Client ✅
 
 Completes the full Phase 1 end-to-end flow by adding workspace management and
 the embedded terminal. The `LoginPage` (Phase 1.5) and project registration UI

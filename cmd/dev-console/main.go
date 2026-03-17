@@ -20,7 +20,7 @@ import (
 	"github.com/greghaynes/dev-console/internal/auth"
 	"github.com/greghaynes/dev-console/internal/config"
 	"github.com/greghaynes/dev-console/internal/project"
-	"github.com/greghaynes/dev-console/internal/templates"
+	"github.com/greghaynes/dev-console/internal/spa"
 	"github.com/greghaynes/dev-console/internal/terminal"
 	"github.com/greghaynes/dev-console/internal/workspace"
 )
@@ -103,21 +103,10 @@ func buildRouter(cfg *config.Config) *mux.Router {
 
 	authHandler := auth.NewHandler(&cfg.Auth)
 
-	// Unauthenticated page routes.
-	r.HandleFunc("/login", func(w http.ResponseWriter, _ *http.Request) {
-		templates.RenderLogin(w)
-	}).Methods(http.MethodGet)
-
 	// OAuth routes (unauthenticated).
 	r.HandleFunc("/auth/login", authHandler.LoginHandler).Methods(http.MethodGet)
 	r.HandleFunc("/auth/callback", authHandler.CallbackHandler).Methods(http.MethodGet)
 	r.HandleFunc("/auth/logout", authHandler.LogoutHandler).Methods(http.MethodPost)
-
-	// Root: redirect to /login when unauthenticated; show index page when authenticated.
-	r.Handle("/", authHandler.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := auth.UserFromContext(r.Context())
-		templates.RenderIndex(w, templates.IndexData{Login: user.Login, ID: user.ID})
-	}))).Methods(http.MethodGet)
 
 	// Protected API routes.
 	api := r.PathPrefix("/api").Subrouter()
@@ -137,6 +126,11 @@ func buildRouter(cfg *config.Config) *mux.Router {
 	})
 	workspace.RegisterRoutes(api, wm, pm)
 	terminal.RegisterRoutes(api, tm, wm, pm)
+
+	// Serve the embedded SPA for all other routes (Phase 1.9).
+	// This must be registered last so that the more specific routes above
+	// take precedence.
+	r.PathPrefix("/").Handler(spa.Handler())
 
 	return r
 }
