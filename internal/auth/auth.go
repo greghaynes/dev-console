@@ -107,23 +107,19 @@ func (h *Handler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Secure:   true,
 	})
-	http.Redirect(w, r, "/login", http.StatusFound)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 // RequireAuth is middleware that validates the session cookie.  Authenticated
 // user information is stored in the request context so downstream handlers can
 // retrieve it with UserFromContext.  The GitHub OAuth token is available via
-// OAuthTokenFromContext.  Unauthenticated requests are redirected to /login;
-// API requests (path prefix /api/) receive a 401 instead.
+// OAuthTokenFromContext.  Unauthenticated API requests (path prefix /api/)
+// receive a 401 response.
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, oauthToken, err := h.userFromCookie(r)
 		if err != nil {
-			if strings.HasPrefix(r.URL.Path, "/api/") {
-				http.Error(w, "authentication required", http.StatusUnauthorized)
-			} else {
-				http.Redirect(w, r, "/login", http.StatusFound)
-			}
+			http.Error(w, "authentication required", http.StatusUnauthorized)
 			return
 		}
 

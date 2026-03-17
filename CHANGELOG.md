@@ -8,6 +8,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Phase 1.9: Minimal Web Client
+
+- `client/src/pages/WorkspaceListPage.tsx` — lists workspaces for a selected
+  project (`GET /api/projects/:pid/workspaces`); breadcrumb navigation (← Back
+  to projects); "New Workspace" dialog posts `POST /api/projects/:pid/workspaces`
+  and refreshes the list; each workspace row has "Open Terminal ›" and "✕
+  Delete" buttons; responsive layout at 375 px viewport.
+- `client/src/pages/TerminalPage.tsx` — creates a terminal session
+  (`POST /api/projects/:pid/workspaces/:wid/terminals`), opens a WebSocket at
+  `WS /api/projects/:pid/workspaces/:wid/terminals/:tid`, and renders an
+  `@xterm/xterm` `Terminal` instance attached to it; sends
+  `{ "type": "resize", "cols": N, "rows": N }` on open and on window resize;
+  full cleanup on unmount; in demo mode uses an in-process echo socket so no
+  server process is required.
+- `internal/spa/` package — embeds the compiled React SPA via `//go:embed
+  all:dist` and exposes `Handler()`, an `http.Handler` that serves static assets
+  with an `index.html` fallback for client-side routes.
+- `cmd/dev-console/main.go` — removed `internal/templates/` (`GET /` and
+  `GET /login` template routes); replaced with `r.PathPrefix("/").Handler(spa.Handler())`
+  catch-all so the SPA handles the login page and all client-side routes.
+- `internal/auth/` — `RequireAuth` now always returns 401 for unauthenticated
+  requests (HTML redirect to `/login` removed since the SPA owns that route);
+  `LogoutHandler` redirects to `/` instead of `/login`.
+- `client/src/App.tsx` — added routes for `WorkspaceListPage`
+  (`/projects/:pid/workspaces`) and `TerminalPage`
+  (`/projects/:pid/workspaces/:wid/terminal`), both behind `AuthGuard`.
+- `client/src/pages/ProjectsPage.tsx` — project rows and cards now navigate to
+  `/projects/:pid/workspaces` instead of inline accordion expansion; removed
+  `WorkspaceRow` sub-component (its role is now fulfilled by `WorkspaceListPage`).
+- `client/src/mocks/handlers.ts` — added MSW handlers:
+  `GET /api/projects/:pid`, `DELETE /api/projects/:pid`,
+  `GET /api/projects/:pid/workspaces`, `POST /api/projects/:pid/workspaces`,
+  `DELETE /api/projects/:pid/workspaces/:wid`,
+  `POST /api/projects/:pid/workspaces/:wid/terminals`; per-project workspace
+  in-memory store pre-seeded with one `main` workspace per demo project.
+- `Makefile` — added `client-build` target; `build` target now runs
+  `client-build` first and copies `client/dist/` to `internal/spa/dist/` before
+  running `go build`.
+- `@xterm/xterm v6.0.0` and `@xterm/addon-fit v0.11.0` added as client
+  dependencies.
+
 ### Added — Phase 1.8: Terminal Backend
 
 - `internal/terminal/` package: `Session` struct wrapping a `creack/pty` PTY +

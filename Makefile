@@ -1,7 +1,13 @@
-.PHONY: build test test-race dev clean lint vet site-build site-build-with-demo site-serve
+.PHONY: build client-build test test-race dev clean lint vet site-build site-build-with-demo site-serve
+
+# Build the client SPA (production build for embedding in the server binary).
+client-build:
+	cd client && npm ci && npm run build
 
 # Build the server binary.
-build:
+# Copies the compiled SPA into internal/spa/dist/ so that go:embed picks it up.
+build: client-build
+	cp -r client/dist/. internal/spa/dist/
 	go build -o bin/dev-console ./cmd/dev-console
 
 # Run all tests.
