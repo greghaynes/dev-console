@@ -139,7 +139,7 @@ func (m *Manager) Delete(projectID, id string) error {
 	// Run `git worktree remove` from the parent directory of the worktree
 	// (i.e. the project root).  Running it from inside the worktree being
 	// removed would cause git to error.
-	projectRoot := filepath.Dir(filepath.Dir(ws.RootPath)) // RootPath = <projectRoot>/worktrees/<id>
+	projectRoot := filepath.Dir(filepath.Dir(ws.RootPath))                                      // RootPath = <projectRoot>/worktrees/<id>
 	cmd := exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", ws.RootPath) // #nosec G204
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("removing git worktree: %w (git output: %s)", err, out)
