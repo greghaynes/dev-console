@@ -18,8 +18,16 @@ var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
 	Auth       AuthConfig       `yaml:"auth"`
+	Storage    StorageConfig    `yaml:"storage"`
 	LLM        LLMConfig        `yaml:"llm"`
 	Workspaces []WorkspaceEntry `yaml:"workspaces"`
+}
+
+// StorageConfig holds settings for on-disk project and workspace storage.
+type StorageConfig struct {
+	// ProjectsDir is the root directory under which cloned project repositories
+	// are stored.  Each project occupies a subdirectory named after its slug.
+	ProjectsDir string `yaml:"projectsDir"`
 }
 
 // ServerConfig holds HTTP server settings.

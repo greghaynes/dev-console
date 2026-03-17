@@ -22,7 +22,10 @@ const sessionCookieName = "dc_session"
 // contextKey is an unexported type for context keys in this package.
 type contextKey int
 
-const userContextKey contextKey = 0
+const (
+	userContextKey  contextKey = 0
+	tokenContextKey contextKey = 1
+)
 
 // User holds the authenticated GitHub user information stored in the session.
 type User struct {
@@ -84,7 +87,7 @@ func (h *Handler) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cookie, err := buildSessionCookie(h.cfg.SessionSecret, user, ttl)
+	cookie, err := buildSessionCookie(h.cfg.SessionSecret, user, token, ttl)
 	if err != nil {
 		http.Error(w, "failed to create session", http.StatusInternalServerError)
 		return
@@ -109,11 +112,12 @@ func (h *Handler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
 // RequireAuth is middleware that validates the session cookie.  Authenticated
 // user information is stored in the request context so downstream handlers can
-// retrieve it with UserFromContext.  Unauthenticated requests are redirected to
-// /login; API requests (path prefix /api/) receive a 401 instead.
+// retrieve it with UserFromContext.  The GitHub OAuth token is available via
+// OAuthTokenFromContext.  Unauthenticated requests are redirected to /login;
+// API requests (path prefix /api/) receive a 401 instead.
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, err := h.userFromCookie(r)
+		user, oauthToken, err := h.userFromCookie(r)
 		if err != nil {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				http.Error(w, "authentication required", http.StatusUnauthorized)
@@ -124,6 +128,7 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), userContextKey, user)
+		ctx = context.WithValue(ctx, tokenContextKey, oauthToken)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -141,6 +146,13 @@ func WhoAmIHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(user); err != nil {
 		http.Error(w, "encoding response", http.StatusInternalServerError)
 	}
+}
+
+// OAuthTokenFromContext returns the GitHub OAuth access token stored in ctx by
+// RequireAuth, or an empty string if absent.
+func OAuthTokenFromContext(ctx context.Context) string {
+	t, _ := ctx.Value(tokenContextKey).(string)
+	return t
 }
 
 // UserFromContext returns the User stored in ctx by RequireAuth, or nil.
@@ -239,23 +251,25 @@ func fetchGitHubUser(ctx context.Context, accessToken string) (*User, error) {
 
 // sessionClaims are the JWT claims stored in the session cookie.
 type sessionClaims struct {
-	Login string `json:"login"`
-	ID    int64  `json:"id"`
+	Login      string `json:"login"`
+	ID         int64  `json:"id"`
+	OAuthToken string `json:"oauthToken,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // BuildSessionCookieForTest is an exported wrapper around buildSessionCookie for
 // use in package tests.
 func BuildSessionCookieForTest(secret string, user *User, ttl time.Duration) (*http.Cookie, error) {
-	return buildSessionCookie(secret, user, ttl)
+	return buildSessionCookie(secret, user, "", ttl)
 }
 
 // buildSessionCookie creates a signed JWT and wraps it in an HTTP-only cookie.
-func buildSessionCookie(secret string, user *User, ttl time.Duration) (*http.Cookie, error) {
+func buildSessionCookie(secret string, user *User, oauthToken string, ttl time.Duration) (*http.Cookie, error) {
 	now := time.Now()
 	claims := sessionClaims{
-		Login: user.Login,
-		ID:    user.ID,
+		Login:      user.Login,
+		ID:         user.ID,
+		OAuthToken: oauthToken,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
@@ -279,11 +293,12 @@ func buildSessionCookie(secret string, user *User, ttl time.Duration) (*http.Coo
 	}, nil
 }
 
-// userFromCookie validates the session cookie from r and returns the User.
-func (h *Handler) userFromCookie(r *http.Request) (*User, error) {
+// userFromCookie validates the session cookie from r and returns the User and
+// the GitHub OAuth token stored in the session.
+func (h *Handler) userFromCookie(r *http.Request) (*User, string, error) {
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
-		return nil, fmt.Errorf("no session cookie: %w", err)
+		return nil, "", fmt.Errorf("no session cookie: %w", err)
 	}
 
 	var claims sessionClaims
@@ -294,8 +309,8 @@ func (h *Handler) userFromCookie(r *http.Request) (*User, error) {
 		return []byte(h.cfg.SessionSecret), nil
 	})
 	if err != nil || !token.Valid {
-		return nil, fmt.Errorf("invalid session token: %w", err)
+		return nil, "", fmt.Errorf("invalid session token: %w", err)
 	}
 
-	return &User{Login: claims.Login, ID: claims.ID}, nil
+	return &User{Login: claims.Login, ID: claims.ID}, claims.OAuthToken, nil
 }
