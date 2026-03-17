@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Phase 1.6: SPA Add Project from GitHub
+
+- `GET /api/projects`, `POST /api/projects`, and `GET /api/github/repos` MSW
+  handlers added to `client/src/mocks/handlers.ts`; `POST` handler appends the
+  new project to the in-handler store so the project list refreshes correctly.
+- `ProjectsPage` now fetches `GET /api/projects` on mount using
+  `useEffect` + `useState`; hardcoded `PROJECTS` constant removed; API response
+  is adapted to the existing UI shape via a `toUiProject()` helper.
+- `DesktopView` and `MobileView` now receive a `projects` prop instead of
+  reading the module-level constant; loading and error states added.
+- `AddProjectDialog` now fetches `GET /api/github/repos` on open; the "Add
+  Project" button calls `POST /api/projects` with `{ repoURL: selectedRepo.htmlURL }`
+  and accepts an `onAdd` callback that re-fetches the project list on success.
+- `ApiProject`, `ApiRepo`, `UiWorkspace`, and `UiProject` TypeScript interfaces
+  replace `typeof PROJECTS[0]` and `typeof REPOS[0]` inline types throughout
+  the file.
+
 ### Added — Phase 1.5: SPA GitHub OAuth Login
 
 - `client/src/context/AuthContext.tsx` — `AuthProvider` component and `useAuth`

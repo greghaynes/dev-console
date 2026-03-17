@@ -13,69 +13,68 @@
 import { useEffect, useState } from 'react'
 
 // ---------------------------------------------------------------------------
-// Shared data
+// API types
 // ---------------------------------------------------------------------------
 
-const PROJECTS = [
-  {
-    id: 'my-project',
-    name: 'my-project',
-    repo: 'myorg/my-project',
-    repoDisplay: 'github.com/myorg/my-project',
-    language: 'Go',
-    lastUsed: '2h',
-    lastUsedFull: '2 hours ago',
-    workspaces: [
-      { id: 'main', branch: 'main', pr: null, lastUsed: '2h ago' },
-      { id: 'feature-auth', branch: 'feature/auth', pr: '#42', lastUsed: '1d ago' },
-      { id: 'fix-logs', branch: 'fix/logs', pr: '#45', lastUsed: '4d ago' },
-    ],
-  },
-  {
-    id: 'backend-api',
-    name: 'backend-api',
-    repo: 'myorg/backend-api',
-    repoDisplay: 'github.com/myorg/backend-api',
-    language: 'Go',
-    lastUsed: '1d',
-    lastUsedFull: '1 day ago',
-    workspaces: [
-      { id: 'main', branch: 'main', pr: null, lastUsed: '1d ago' },
-    ],
-  },
-  {
-    id: 'frontend-app',
-    name: 'frontend-app',
-    repo: 'myorg/frontend-app',
-    repoDisplay: 'github.com/myorg/frontend-app',
-    language: 'TypeScript',
-    lastUsed: '3d',
-    lastUsedFull: '3 days ago',
-    workspaces: [
-      { id: 'main', branch: 'main', pr: null, lastUsed: '3d ago' },
-      { id: 'feat-dark', branch: 'feat/dark-mode', pr: '#31', lastUsed: '3d ago' },
-    ],
-  },
-  {
-    id: 'docs',
-    name: 'docs',
-    repo: 'myorg/docs',
-    repoDisplay: 'github.com/myorg/docs',
-    language: 'Markdown',
-    lastUsed: '1w',
-    lastUsedFull: '1 week ago',
-    workspaces: [
-      { id: 'main', branch: 'main', pr: null, lastUsed: '1w ago' },
-    ],
-  },
-]
+interface ApiProject {
+  id: string
+  name: string
+  repoURL: string
+  createdAt: string
+}
 
-const REPOS = [
-  { full_name: 'myorg/my-project', language: 'Go', updated: '2h ago' },
-  { full_name: 'myorg/backend-api', language: 'Go', updated: '1d ago' },
-  { full_name: 'myorg/frontend-app', language: 'TypeScript', updated: '3d ago' },
-  { full_name: 'myorg/docs', language: 'Markdown', updated: '1w ago' },
-]
+interface ApiRepo {
+  id: number
+  fullName: string
+  description: string
+  language: string
+  updatedAt: string
+  htmlURL: string
+}
+
+// ---------------------------------------------------------------------------
+// UI types
+// ---------------------------------------------------------------------------
+
+interface UiWorkspace {
+  id: string
+  branch: string
+  pr: string | null
+  lastUsed: string
+}
+
+interface UiProject {
+  id: string
+  name: string
+  repo: string
+  repoDisplay: string
+  language: string
+  lastUsed: string
+  lastUsedFull: string
+  workspaces: UiWorkspace[]
+}
+
+function toUiProject(p: ApiProject): UiProject {
+  let repo = ''
+  let repoDisplay = p.repoURL
+  try {
+    const url = new URL(p.repoURL)
+    repo = url.pathname.replace(/^\//, '')
+    repoDisplay = url.host + url.pathname
+  } catch {
+    // fall back to raw URL
+  }
+  return {
+    id: p.id,
+    name: p.name,
+    repo,
+    repoDisplay,
+    language: '',
+    lastUsed: new Date(p.createdAt).toLocaleDateString(),
+    lastUsedFull: new Date(p.createdAt).toLocaleString(),
+    workspaces: [],
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Tokens
@@ -131,13 +130,49 @@ function useIsDesktop(): boolean {
 // Shared: "Add Project" dialog  (used by both views)
 // ---------------------------------------------------------------------------
 
-function AddProjectDialog({ onClose }: { onClose: () => void }) {
+function AddProjectDialog({ onClose, onAdd }: { onClose: () => void; onAdd: () => void }) {
   const [filter, setFilter] = useState('')
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<ApiRepo | null>(null)
+  const [repos, setRepos] = useState<ApiRepo[]>([])
+  const [reposLoading, setReposLoading] = useState(true)
+  const [reposError, setReposError] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
 
-  const filtered = REPOS.filter(r =>
-    r.full_name.toLowerCase().includes(filter.toLowerCase()),
+  useEffect(() => {
+    fetch('/api/github/repos')
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json() as Promise<ApiRepo[]>
+      })
+      .then(data => setRepos(data))
+      .catch(err => setReposError(String(err)))
+      .finally(() => setReposLoading(false))
+  }, [])
+
+  const filtered = repos.filter(r =>
+    r.fullName.toLowerCase().includes(filter.toLowerCase()),
   )
+
+  async function handleAdd() {
+    if (!selected || adding) return
+    setAdding(true)
+    setAddError(null)
+    try {
+      const r = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoURL: selected.htmlURL }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      onAdd()
+      onClose()
+    } catch (err) {
+      setAddError(String(err))
+    } finally {
+      setAdding(false)
+    }
+  }
 
   function repoRowStyle(isSelected: boolean): React.CSSProperties {
     return {
@@ -203,6 +238,24 @@ function AddProjectDialog({ onClose }: { onClose: () => void }) {
       overflow: 'hidden',
       marginBottom: '1.25rem',
     },
+    loadingRow: {
+      padding: '1.5rem',
+      textAlign: 'center',
+      color: C.muted,
+      fontSize: '0.875rem',
+    },
+    errorRow: {
+      padding: '1.5rem',
+      textAlign: 'center',
+      color: '#f87171',
+      fontSize: '0.875rem',
+    },
+    addErrorMsg: {
+      fontSize: '0.8125rem',
+      color: '#f87171',
+      marginBottom: '0.75rem',
+      textAlign: 'right',
+    },
     radioOuter: {
       width: '1rem',
       height: '1rem',
@@ -230,11 +283,11 @@ function AddProjectDialog({ onClose }: { onClose: () => void }) {
       padding: '0.5rem 1rem',
       borderRadius: '0.375rem',
       border: 'none',
-      background: selected ? C.blue : '#334155',
+      background: selected && !adding ? C.blue : '#334155',
       color: 'white',
       fontSize: '0.875rem',
       fontWeight: 600,
-      cursor: selected ? 'pointer' : 'default',
+      cursor: selected && !adding ? 'pointer' : 'default',
     },
   }
 
@@ -256,26 +309,37 @@ function AddProjectDialog({ onClose }: { onClose: () => void }) {
           style={s.filterInput}
         />
         <div style={s.repoList}>
-          {filtered.map((repo, i) => (
-            <div
-              key={repo.full_name}
-              style={{
-                ...repoRowStyle(selected === repo.full_name),
-                borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : 'none',
-              }}
-              onClick={() => setSelected(repo.full_name)}
-            >
-              <div style={s.radioOuter}>
-                {selected === repo.full_name && <div style={s.radioInner} />}
+          {reposLoading ? (
+            <div style={s.loadingRow}>Loading…</div>
+          ) : reposError ? (
+            <div style={s.errorRow}>{reposError}</div>
+          ) : (
+            filtered.map((repo, i) => (
+              <div
+                key={repo.id}
+                style={{
+                  ...repoRowStyle(selected?.id === repo.id),
+                  borderBottom: i < filtered.length - 1 ? `1px solid ${C.border}` : 'none',
+                }}
+                onClick={() => setSelected(repo)}
+              >
+                <div style={s.radioOuter}>
+                  {selected?.id === repo.id && <div style={s.radioInner} />}
+                </div>
+                <span style={s.repoName}>{repo.fullName}</span>
+                <span style={s.repoMeta}>
+                  {repo.language} · Updated {new Date(repo.updatedAt).toLocaleDateString()}
+                </span>
               </div>
-              <span style={s.repoName}>{repo.full_name}</span>
-              <span style={s.repoMeta}>{repo.language} · Updated {repo.updated}</span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
+        {addError && <div style={s.addErrorMsg}>{addError}</div>}
         <div style={s.actions}>
           <button style={s.cancelBtn} onClick={onClose}>Cancel</button>
-          <button style={s.addBtn} disabled={!selected}>Add Project ›</button>
+          <button style={s.addBtn} disabled={!selected || adding} onClick={handleAdd}>
+            {adding ? 'Adding…' : 'Add Project ›'}
+          </button>
         </div>
       </div>
     </div>
@@ -286,7 +350,7 @@ function AddProjectDialog({ onClose }: { onClose: () => void }) {
 // Desktop view (Variant C)
 // ---------------------------------------------------------------------------
 
-function WorkspaceRow({ ws }: { ws: typeof PROJECTS[0]['workspaces'][0] }) {
+function WorkspaceRow({ ws }: { ws: UiWorkspace }) {
   const [hover, setHover] = useState(false)
   const s: Record<string, React.CSSProperties> = {
     row: {
@@ -332,7 +396,7 @@ function WorkspaceRow({ ws }: { ws: typeof PROJECTS[0]['workspaces'][0] }) {
   )
 }
 
-function ProjectTableRow({ project }: { project: typeof PROJECTS[0] }) {
+function ProjectTableRow({ project }: { project: UiProject }) {
   const [expanded, setExpanded] = useState(false)
   const [hover, setHover] = useState(false)
 
@@ -406,10 +470,10 @@ function ProjectTableRow({ project }: { project: typeof PROJECTS[0] }) {
   )
 }
 
-function DesktopView({ onNewProject }: { onNewProject: () => void }) {
+function DesktopView({ onNewProject, projects }: { onNewProject: () => void; projects: UiProject[] }) {
   const [query, setQuery] = useState('')
 
-  const filtered = PROJECTS.filter(
+  const filtered = projects.filter(
     p =>
       p.name.toLowerCase().includes(query.toLowerCase()) ||
       p.repo.toLowerCase().includes(query.toLowerCase()),
@@ -547,7 +611,7 @@ function DesktopView({ onNewProject }: { onNewProject: () => void }) {
 // Mobile view (Variant A)
 // ---------------------------------------------------------------------------
 
-function ProjectCard({ project }: { project: typeof PROJECTS[0] }) {
+function ProjectCard({ project }: { project: UiProject }) {
   const [hover, setHover] = useState(false)
   const s: Record<string, React.CSSProperties> = {
     card: {
@@ -604,7 +668,7 @@ function ProjectCard({ project }: { project: typeof PROJECTS[0] }) {
   )
 }
 
-function MobileView({ onNewProject }: { onNewProject: () => void }) {
+function MobileView({ onNewProject, projects }: { onNewProject: () => void; projects: UiProject[] }) {
   const s: Record<string, React.CSSProperties> = {
     header: {
       display: 'flex',
@@ -670,7 +734,7 @@ function MobileView({ onNewProject }: { onNewProject: () => void }) {
           <button style={s.newBtn} onClick={onNewProject}>+ New Project</button>
         </div>
         <hr style={s.divider} />
-        {PROJECTS.map(p => <ProjectCard key={p.id} project={p} />)}
+        {projects.map(p => <ProjectCard key={p.id} project={p} />)}
       </main>
     </>
   )
@@ -683,13 +747,57 @@ function MobileView({ onNewProject }: { onNewProject: () => void }) {
 export default function ProjectsPage() {
   const isDesktop = useIsDesktop()
   const [showDialog, setShowDialog] = useState(false)
+  const [projects, setProjects] = useState<UiProject[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  function fetchProjects() {
+    setLoading(true)
+    setError(null)
+    fetch('/api/projects')
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json() as Promise<ApiProject[]>
+      })
+      .then(data => setProjects(data.map(toUiProject)))
+      .catch(err => setError(String(err)))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    fetchProjects()
+  }, [])
+
+  const s: Record<string, React.CSSProperties> = {
+    statusRow: {
+      padding: '2rem',
+      textAlign: 'center',
+      color: C.muted,
+      fontSize: '0.9375rem',
+    },
+    errorRow: {
+      padding: '2rem',
+      textAlign: 'center',
+      color: '#f87171',
+      fontSize: '0.9375rem',
+    },
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: C.bg }}>
-      {isDesktop
-        ? <DesktopView onNewProject={() => setShowDialog(true)} />
-        : <MobileView onNewProject={() => setShowDialog(true)} />}
-      {showDialog && <AddProjectDialog onClose={() => setShowDialog(false)} />}
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: C.bg, color: C.text }}>
+      {loading && <div style={s.statusRow}>Loading…</div>}
+      {!loading && error && <div style={s.errorRow}>{error}</div>}
+      {!loading && !error && (
+        isDesktop
+          ? <DesktopView onNewProject={() => setShowDialog(true)} projects={projects} />
+          : <MobileView onNewProject={() => setShowDialog(true)} projects={projects} />
+      )}
+      {showDialog && (
+        <AddProjectDialog
+          onClose={() => setShowDialog(false)}
+          onAdd={fetchProjects}
+        />
+      )}
     </div>
   )
 }

@@ -224,7 +224,7 @@ demo mode; no new handlers are needed for this phase.
 5. Production mode: visiting `/projects` with no session cookie redirects the
    browser to `/`.
 
-### 1.6 SPA Add Project from GitHub *(parallel with 1.5)*
+### 1.6 SPA Add Project from GitHub *(parallel with 1.5)* ✅
 
 Connects the project-list page to the REST API so users can browse their
 GitHub repositories and register new projects. Phases 1.5 and 1.6 are
