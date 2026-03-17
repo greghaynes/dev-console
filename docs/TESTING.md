@@ -49,6 +49,7 @@ external process (no git, no network).
 generation, in-memory registry CRUD, error sentinel values).
 
 **Examples:**
+
 - `TestManager_Create_InvalidURL` — verifies the URL-validation regex rejects
   non-GitHub URLs before `git clone` is attempted.
 - `TestManager_Get_NotFound` — verifies `ErrNotFound` is returned for an
@@ -70,6 +71,7 @@ at this layer fails if a handler returns the wrong HTTP status code, a wrong
 JSON shape, or an unexpected header — things unit tests can't catch.
 
 **Examples:**
+
 - `TestListProjects_EmptyReturnsArray` — verifies `GET /api/projects` returns
   `200` with `Content-Type: application/json` and an empty JSON array (not
   `null`) when no projects exist.
@@ -92,6 +94,7 @@ interact — for example, the wrong working directory for `git worktree remove`,
 or a cascade-delete that removes workspaces from memory but not from disk.
 
 **Examples:**
+
 - `TestProjectLifecycle_CRUD` — creates a project record, lists it, gets its
   metadata, deletes it, and verifies the list is empty and a GET returns 404.
 - `TestProjectDelete_CascadesWorkspaces` — creates two worktrees, deletes the
