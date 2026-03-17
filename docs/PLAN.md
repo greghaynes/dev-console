@@ -265,7 +265,7 @@ Phase 1.8.
 5. Production mode: the project list and repo picker call real API endpoints;
    requires Phase 1.7 backend to be running.
 
-### 1.7 Project and Workspace Registration
+### 1.7 Project and Workspace Registration ✅
 
 **Data models** (as specified in `DESIGN.md §5.1` and `§6.1`):
 

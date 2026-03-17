@@ -3,9 +3,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -17,7 +19,9 @@ import (
 
 	"github.com/greghaynes/dev-console/internal/auth"
 	"github.com/greghaynes/dev-console/internal/config"
+	"github.com/greghaynes/dev-console/internal/project"
 	"github.com/greghaynes/dev-console/internal/templates"
+	"github.com/greghaynes/dev-console/internal/workspace"
 )
 
 func main() {
@@ -117,5 +121,92 @@ func buildRouter(cfg *config.Config) *mux.Router {
 	api.Use(authHandler.RequireAuth)
 	api.HandleFunc("/whoami", auth.WhoAmIHandler).Methods(http.MethodGet)
 
+	// GitHub repos proxy (requires OAuth token stored in session).
+	api.HandleFunc("/github/repos", githubReposHandler).Methods(http.MethodGet)
+
+	// Project and workspace management (Phase 1.7).
+	pm := project.NewManager(cfg.Storage.ProjectsDir)
+	wm := workspace.NewManager()
+
+	project.RegisterRoutes(api, pm, func(projectID string) error {
+		return wm.DeleteAll(projectID)
+	})
+	workspace.RegisterRoutes(api, wm, pm)
+
 	return r
+}
+
+// githubReposHandler proxies GET /api/github/repos by calling the GitHub API
+// with the OAuth token stored in the session cookie.
+func githubReposHandler(w http.ResponseWriter, r *http.Request) {
+	oauthToken := auth.OAuthTokenFromContext(r.Context())
+	if oauthToken == "" {
+		http.Error(w, "no GitHub token in session", http.StatusUnauthorized)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
+		"https://api.github.com/user/repos?per_page=100&sort=updated", nil)
+	if err != nil {
+		http.Error(w, "building GitHub request", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+oauthToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "calling GitHub API: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "GitHub API returned "+resp.Status, http.StatusBadGateway)
+		return
+	}
+
+	// Decode GitHub's response and normalize field names.
+	var ghRepos []struct {
+		ID          int64  `json:"id"`
+		FullName    string `json:"full_name"`
+		Description string `json:"description"`
+		Language    string `json:"language"`
+		UpdatedAt   string `json:"updated_at"`
+		HTMLURL     string `json:"html_url"`
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(w, "reading GitHub response", http.StatusBadGateway)
+		return
+	}
+	if err := json.Unmarshal(body, &ghRepos); err != nil {
+		http.Error(w, "parsing GitHub response", http.StatusBadGateway)
+		return
+	}
+
+	type repoItem struct {
+		ID          int64  `json:"id"`
+		FullName    string `json:"fullName"`
+		Description string `json:"description"`
+		Language    string `json:"language"`
+		UpdatedAt   string `json:"updatedAt"`
+		HTMLURL     string `json:"htmlURL"`
+	}
+	out := make([]repoItem, len(ghRepos))
+	for i, gh := range ghRepos {
+		out[i] = repoItem{
+			ID:          gh.ID,
+			FullName:    gh.FullName,
+			Description: gh.Description,
+			Language:    gh.Language,
+			UpdatedAt:   gh.UpdatedAt,
+			HTMLURL:     gh.HTMLURL,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(out); err != nil {
+		http.Error(w, "encoding response", http.StatusInternalServerError)
+	}
 }
