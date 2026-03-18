@@ -531,7 +531,7 @@ backend.
 **Goal:** Users can open a chat session with an AI assistant that can read files
 and answer questions about the workspace. No file writes yet.
 
-### 3.1 LLM Client
+### 3.1 LLM Client ✅
 
 - `internal/llm/` package — thin HTTP client over the OpenAI Chat Completions
   API (streaming); configurable base URL, model, and API key so it works with
@@ -540,7 +540,7 @@ and answer questions about the workspace. No file writes yet.
 **Acceptance:** Unit test that stubs the HTTP response and verifies streamed
 chunks are reassembled correctly.
 
-### 3.2 Agent Session Backend (read-only)
+### 3.2 Agent Session Backend (read-only) ✅
 
 - `internal/agent/` package
   - `Session` — holds conversation history (messages slice), in-flight cancel
@@ -563,7 +563,7 @@ chunks are reassembled correctly.
 **Acceptance:** User can ask "What files are in the root of this workspace?" and
 receive a correct streamed answer.
 
-### 3.3 Chat UI
+### 3.3 Chat UI ✅
 
 - `ChatPanel` component — message history list, user input box, streaming
   assistant response rendered in real time (markdown via `react-markdown`)

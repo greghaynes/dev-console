@@ -31,6 +31,10 @@ const workspaces: Record<string, Array<{ id: string; projectId: string; name: st
   ],
 }
 
+// Per-workspace agent session lists.
+let sessionCounter = 0
+const sessions: Record<string, Array<{ id: string; projectId: string; workspaceId: string; createdAt: string }>> = {}
+
 // ---------------------------------------------------------------------------
 // Demo file system fixture
 // ---------------------------------------------------------------------------
@@ -93,11 +97,68 @@ function handleTerminalConnection({ client }: WebSocketHandlerConnection) {
   })
 }
 
-/** Returns MSW WebSocket handlers for both ws:// and wss:// variants. */
+/** Returns the MSW WebSocket handler for the terminal endpoint. */
 function terminalWsHandlers() {
-  return (['ws', 'wss'] as const).map(proto =>
-    ws.link(`${proto}://*${WS_TERMINAL_PATH}`).addEventListener('connection', handleTerminalConnection)
-  )
+  return [ws.link(`*${WS_TERMINAL_PATH}`).addEventListener('connection', handleTerminalConnection)]
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket chat handler — scripted demo that simulates a streaming agent turn
+// ---------------------------------------------------------------------------
+
+const WS_CHAT_PATH = '/api/projects/:pid/workspaces/:wid/sessions/:sid/chat'
+
+/** Sends a sequence of events over the WebSocket with small delays to simulate streaming. */
+function simulateTurn(client: WebSocketHandlerConnection['client'], userContent: string): void {
+  // Build a plausible response based on the user message.
+  const isListFiles = /file|director|list|what.*in/i.test(userContent)
+
+  function send(obj: object) {
+    client.send(JSON.stringify(obj))
+  }
+
+  // Sequence of events to emit (each item is [delayMs, event]).
+  const events: Array<[number, object]> = []
+  let t = 0
+
+  if (isListFiles) {
+    events.push([t += 100, { type: 'tool_call', id: 'call_demo', name: 'list_files', arguments: '{"path":""}' }])
+    events.push([t += 300, { type: 'tool_result', id: 'call_demo', content: '[{"name":"README.md","type":"file"},{"name":"src","type":"dir"},{"name":"package.json","type":"file"}]' }])
+  }
+
+  const reply = isListFiles
+    ? 'The workspace root contains three entries:\n\n- **README.md** — project readme\n- **src/** — source directory\n- **package.json** — package manifest\n\nWould you like me to read any of these files?'
+    : `I can help you explore this workspace. Try asking me to **list files** or **read a specific file**. What would you like to know?`
+
+  // Stream the reply word-by-word.
+  const words = reply.split(' ')
+  words.forEach((word, idx) => {
+    events.push([t += 60, { type: 'assistant_chunk', content: (idx === 0 ? '' : ' ') + word }])
+  })
+  events.push([t += 100, { type: 'assistant_done' }])
+
+  for (const [delay, evt] of events) {
+    setTimeout(() => send(evt), delay)
+  }
+}
+
+function handleChatConnection({ client }: WebSocketHandlerConnection) {
+  client.addEventListener('message', (event) => {
+    if (typeof event.data !== 'string') return
+    try {
+      const msg = JSON.parse(event.data) as { type: string; content?: string }
+      if (msg.type === 'user_message' && msg.content) {
+        simulateTurn(client, msg.content)
+      }
+    } catch {
+      // ignore malformed frames
+    }
+  })
+}
+
+/** Returns the MSW WebSocket handler for the chat endpoint. */
+function chatWsHandlers() {
+  return [ws.link(`*${WS_CHAT_PATH}`).addEventListener('connection', handleChatConnection)]
 }
 
 // ---------------------------------------------------------------------------
@@ -238,5 +299,43 @@ export const handlers = [
     ])
   }),
 
+  // Agent session REST handlers (Phase 3.2).
+  http.get('/api/projects/:pid/workspaces/:wid/sessions', ({ params }) => {
+    const { pid, wid } = params as { pid: string; wid: string }
+    const key = `${pid}/${wid}`
+    return HttpResponse.json(sessions[key] ?? [])
+  }),
+
+  http.post('/api/projects/:pid/workspaces/:wid/sessions', ({ params }) => {
+    const { pid, wid } = params as { pid: string; wid: string }
+    const key = `${pid}/${wid}`
+    const id = `s-${++sessionCounter}`
+    const session = { id, projectId: pid, workspaceId: wid, createdAt: new Date().toISOString() }
+    if (!sessions[key]) sessions[key] = []
+    sessions[key].push(session)
+    return HttpResponse.json(session, { status: 201 })
+  }),
+
+  http.delete('/api/projects/:pid/workspaces/:wid/sessions/:sid', ({ params }) => {
+    const { pid, wid, sid } = params as { pid: string; wid: string; sid: string }
+    const key = `${pid}/${wid}`
+    const list = sessions[key]
+    if (!list) return new HttpResponse(null, { status: 404 })
+    const idx = list.findIndex(s => s.id === sid)
+    if (idx === -1) return new HttpResponse(null, { status: 404 })
+    list.splice(idx, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get('/api/projects/:pid/workspaces/:wid/sessions/:sid/messages', ({ params }) => {
+    const { pid, wid, sid } = params as { pid: string; wid: string; sid: string }
+    const key = `${pid}/${wid}`
+    const session = (sessions[key] ?? []).find(s => s.id === sid)
+    if (!session) return new HttpResponse(null, { status: 404 })
+    // Return empty history — the live history is kept in the WebSocket.
+    return HttpResponse.json([])
+  }),
+
   ...terminalWsHandlers(),
+  ...chatWsHandlers(),
 ]

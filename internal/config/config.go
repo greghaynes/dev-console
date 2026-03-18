@@ -69,6 +69,7 @@ type GitHubOAuthConfig struct {
 // LLMConfig holds settings for the LLM provider.
 type LLMConfig struct {
 	Provider        string   `yaml:"provider"`
+	BaseURL         string   `yaml:"baseUrl"`
 	APIKey          string   `yaml:"apiKey"`
 	Model           string   `yaml:"model"`
 	AllowedCommands []string `yaml:"allowedCommands"`
