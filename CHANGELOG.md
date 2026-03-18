@@ -8,6 +8,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Phase 2.1: File API
+
+- `GET /api/projects/:pid/workspaces/:wid/files?path=<dir>` — returns a JSON
+  array of `{ name, type, size, modTime }` directory entries for the given path
+  (defaults to workspace root); 400 for paths that escape the workspace root;
+  404 for unknown project/workspace or path.
+- `GET /api/projects/:pid/workspaces/:wid/file?path=<file>` — returns raw file
+  contents using `http.ServeFile`; 400 if `path` is absent or escapes the root;
+  404 for unknown project/workspace or missing file; 400 if path resolves to a
+  directory.
+- `safeWorkspacePath` helper in `internal/workspace/handlers.go` that resolves a
+  client-supplied relative path, cleans it with `filepath.Abs`+`filepath.Clean`,
+  and rejects anything that escapes the workspace root — path-traversal
+  protection for both new endpoints.
+- New tests in `internal/workspace/workspace_test.go`:
+  `TestFilesHandler_ListsDirectory`, `TestFilesHandler_SubdirectoryPath`,
+  `TestFilesHandler_PathTraversal`, `TestFileHandler_ReturnsFileContents`,
+  `TestFileHandler_MissingPath`, `TestFileHandler_PathTraversal`.
+
+### Added — Phase 2.2: File Browser UI
+
+- `client/src/components/FileTree.tsx` — collapsible file tree; lazily loads
+  directory contents one level at a time from
+  `GET /api/projects/:pid/workspaces/:wid/files`; highlights the selected file;
+  keyboard-accessible (`Enter`/`Space` on each row).
+- `client/src/components/FileViewer.tsx` — fetches raw file contents from
+  `GET /api/projects/:pid/workspaces/:wid/file` and renders them in a `<pre>`
+  block with client-side syntax highlighting via `highlight.js` (github-dark
+  theme); filename shown in a sticky header.
+- `client/src/pages/WorkspacePage.tsx` — split layout: collapsible file tree
+  sidebar on the left, tabbed panel (Terminal / File) on the right; clicking a
+  file in the tree switches to the File tab and loads `FileViewer`; the terminal
+  tab embeds the same PTY WebSocket logic as `TerminalPage`; a toggle button
+  collapses/expands the sidebar; route
+  `/projects/:pid/workspaces/:wid`.
+- `client/src/App.tsx` — added `WorkspacePage` at
+  `/projects/:pid/workspaces/:wid` (behind `AuthGuard`); the standalone
+  `TerminalPage` route (`/projects/:pid/workspaces/:wid/terminal`) is kept for
+  backward compatibility.
+- `client/src/pages/WorkspaceListPage.tsx` — workspace rows now navigate to the
+  new `WorkspacePage` (`/projects/:pid/workspaces/:wid`) instead of directly to
+  the terminal.
+- `client/src/mocks/handlers.ts` — added demo MSW handlers:
+  `GET /api/projects/:pid/workspaces/:wid/files` returns a small hard-coded
+  directory tree; `GET /api/projects/:pid/workspaces/:wid/file` returns
+  sample source files keyed by path.
+- `highlight.js@11.11.1` added as a client dependency.
+
 ### Added — Phase 1.9: Minimal Web Client
 
 - `client/src/pages/WorkspaceListPage.tsx` — lists workspaces for a selected

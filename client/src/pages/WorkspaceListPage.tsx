@@ -270,10 +270,10 @@ function WorkspaceRow({
       style={s.row}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      onClick={() => navigate(`/projects/${pid}/workspaces/${ws.id}/terminal`)}
+      onClick={() => navigate(`/projects/${pid}/workspaces/${ws.id}`)}
       role="button"
       tabIndex={0}
-      aria-label={`Open terminal for workspace ${ws.name}`}
+      aria-label={`Open workspace ${ws.name}`}
       onKeyDown={activateOnKeyboard}
     >
       <span style={{ color: C.muted, fontSize: '0.875rem', flexShrink: 0 }}>⎇</span>
@@ -284,10 +284,10 @@ function WorkspaceRow({
       <span style={s.meta}>{new Date(ws.createdAt).toLocaleDateString()}</span>
       <button
         style={s.openBtn}
-        onClick={e => { e.stopPropagation(); navigate(`/projects/${pid}/workspaces/${ws.id}/terminal`) }}
-        aria-label={`Open terminal for ${ws.branch}`}
+        onClick={e => { e.stopPropagation(); navigate(`/projects/${pid}/workspaces/${ws.id}`) }}
+        aria-label={`Open workspace ${ws.branch}`}
       >
-        Open Terminal ›
+        Open ›
       </button>
       <button
         style={s.deleteBtn}

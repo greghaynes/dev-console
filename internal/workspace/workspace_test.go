@@ -27,7 +27,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -390,5 +392,246 @@ func TestWorkspaceJSON(t *testing.T) {
 	}
 	if !strings.Contains(s, `"projectId"`) {
 		t.Errorf("JSON should contain projectId, got: %s", s)
+	}
+}
+
+// ── File API handler tests ─────────────────────────────────────────────────────
+
+// TestFilesHandler_ListsDirectory verifies that GET .../files returns a JSON
+// array of directory entries for the workspace root.
+func TestFilesHandler_ListsDirectory(t *testing.T) {
+	repoRoot := newLocalGitRepo(t, "feature-files")
+	pm := project.NewManager(t.TempDir())
+	wm := workspace.NewManager()
+	registerProject(pm, "proj1", repoRoot)
+	r := newRouter(wm, pm)
+
+	// Create workspace.
+	body := `{"branch":"feature-files"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/proj1/workspaces",
+		strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("POST workspaces: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var ws workspace.Workspace
+	if err := json.NewDecoder(rr.Body).Decode(&ws); err != nil {
+		t.Fatalf("decoding workspace: %v", err)
+	}
+	wid := ws.ID
+
+	// Retrieve the workspace root from the manager to write a test file.
+	got, err := wm.Get("proj1", wid)
+	if err != nil {
+		t.Fatalf("wm.Get: %v", err)
+	}
+	// Write a test file inside the worktree.
+	if err := os.WriteFile(filepath.Join(got.RootPath, "hello.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("writing test file: %v", err)
+	}
+
+	// GET files endpoint.
+	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces/"+wid+"/files", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET files: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	var entries []workspace.DirEntry
+	if err := json.NewDecoder(rr.Body).Decode(&entries); err != nil {
+		t.Fatalf("decoding entries: %v", err)
+	}
+
+	// hello.txt must appear.
+	found := false
+	for _, e := range entries {
+		if e.Name == "hello.txt" && e.Type == "file" {
+			found = true
+		}
+	}
+	if !found {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name
+		}
+		t.Errorf("hello.txt not found in entries: %v", names)
+	}
+}
+
+// TestFilesHandler_SubdirectoryPath verifies that passing a ?path= query
+// parameter returns entries for a sub-directory.
+func TestFilesHandler_SubdirectoryPath(t *testing.T) {
+	repoRoot := newLocalGitRepo(t, "feature-subdir")
+	pm := project.NewManager(t.TempDir())
+	wm := workspace.NewManager()
+	registerProject(pm, "proj1", repoRoot)
+	r := newRouter(wm, pm)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/proj1/workspaces",
+		strings.NewReader(`{"branch":"feature-subdir"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("POST workspaces: status=%d", rr.Code)
+	}
+	var ws workspace.Workspace
+	if err := json.NewDecoder(rr.Body).Decode(&ws); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got, _ := wm.Get("proj1", ws.ID)
+
+	// Create a sub-directory with a file.
+	subDir := filepath.Join(got.RootPath, "src")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "main.go"), []byte("package main"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces/"+ws.ID+"/files?path=src", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET files?path=src: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	var entries []workspace.DirEntry
+	if err := json.NewDecoder(rr.Body).Decode(&entries); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name != "main.go" {
+		t.Errorf("expected [main.go], got %v", entries)
+	}
+}
+
+// TestFilesHandler_PathTraversal verifies that a ../ path escape attempt
+// returns 400.
+func TestFilesHandler_PathTraversal(t *testing.T) {
+	repoRoot := newLocalGitRepo(t, "feature-traversal")
+	pm := project.NewManager(t.TempDir())
+	wm := workspace.NewManager()
+	registerProject(pm, "proj1", repoRoot)
+	r := newRouter(wm, pm)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/proj1/workspaces",
+		strings.NewReader(`{"branch":"feature-traversal"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("POST workspaces: status=%d", rr.Code)
+	}
+	var ws workspace.Workspace
+	if err := json.NewDecoder(rr.Body).Decode(&ws); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces/"+ws.ID+"/files?path=../../etc", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("GET files?path=../../etc: status=%d, want 400", rr.Code)
+	}
+}
+
+// TestFileHandler_ReturnsFileContents verifies that GET .../file?path= returns
+// the raw file contents.
+func TestFileHandler_ReturnsFileContents(t *testing.T) {
+	repoRoot := newLocalGitRepo(t, "feature-readfile")
+	pm := project.NewManager(t.TempDir())
+	wm := workspace.NewManager()
+	registerProject(pm, "proj1", repoRoot)
+	r := newRouter(wm, pm)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/proj1/workspaces",
+		strings.NewReader(`{"branch":"feature-readfile"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("POST workspaces: status=%d", rr.Code)
+	}
+	var ws workspace.Workspace
+	if err := json.NewDecoder(rr.Body).Decode(&ws); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got, _ := wm.Get("proj1", ws.ID)
+
+	const content = "package main\n\nfunc main() {}\n"
+	if err := os.WriteFile(filepath.Join(got.RootPath, "main.go"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces/"+ws.ID+"/file?path=main.go", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET file?path=main.go: status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "package main") {
+		t.Errorf("expected file contents, got: %s", body)
+	}
+}
+
+// TestFileHandler_MissingPath verifies that omitting path= returns 400.
+func TestFileHandler_MissingPath(t *testing.T) {
+	repoRoot := newLocalGitRepo(t, "feature-nopath")
+	pm := project.NewManager(t.TempDir())
+	wm := workspace.NewManager()
+	registerProject(pm, "proj1", repoRoot)
+	r := newRouter(wm, pm)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/proj1/workspaces",
+		strings.NewReader(`{"branch":"feature-nopath"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("POST workspaces: status=%d", rr.Code)
+	}
+	var ws workspace.Workspace
+	if err := json.NewDecoder(rr.Body).Decode(&ws); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces/"+ws.ID+"/file", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("GET file (no path): status=%d, want 400", rr.Code)
+	}
+}
+
+// TestFileHandler_PathTraversal verifies that a ../ path escape attempt returns 400.
+func TestFileHandler_PathTraversal(t *testing.T) {
+	repoRoot := newLocalGitRepo(t, "feature-ftraversal")
+	pm := project.NewManager(t.TempDir())
+	wm := workspace.NewManager()
+	registerProject(pm, "proj1", repoRoot)
+	r := newRouter(wm, pm)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/proj1/workspaces",
+		strings.NewReader(`{"branch":"feature-ftraversal"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("POST workspaces: status=%d", rr.Code)
+	}
+	var ws workspace.Workspace
+	if err := json.NewDecoder(rr.Body).Decode(&ws); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces/"+ws.ID+"/file?path=../../etc/passwd", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("GET file?path=../../etc/passwd: status=%d, want 400", rr.Code)
 	}
 }
