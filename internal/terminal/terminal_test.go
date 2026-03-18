@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -27,6 +26,7 @@ import (
 
 	"github.com/greghaynes/dev-console/internal/project"
 	"github.com/greghaynes/dev-console/internal/terminal"
+	"github.com/greghaynes/dev-console/internal/testutil"
 	"github.com/greghaynes/dev-console/internal/workspace"
 )
 
@@ -40,37 +40,18 @@ func newRouter(tm *terminal.Manager, wm *workspace.Manager, pm *project.Manager)
 	return r
 }
 
-// newLocalGitRepo creates a temporary bare source repository, clones it, and
-// returns the clone path.  extraBranches are created from the initial commit.
+// newLocalGitRepo delegates to testutil.NewLocalGitRepo.
 func newLocalGitRepo(t *testing.T, extraBranches ...string) string {
-	t.Helper()
-	tmp := t.TempDir()
-	bare := tmp + "/source.git"
-	clone := tmp + "/project"
-
-	gitRun(t, "git", "init", "--bare", bare)
-	gitRun(t, "git", "clone", bare, clone)
-	gitRun(t, "git", "-C", clone, "config", "user.email", "test@test.com")
-	gitRun(t, "git", "-C", clone, "config", "user.name", "Test")
-	gitRun(t, "git", "-C", clone, "commit", "--allow-empty", "-m", "init")
-	gitRun(t, "git", "-C", clone, "push", "origin", "master")
-
-	for _, b := range extraBranches {
-		gitRun(t, "git", "-C", clone, "branch", b)
-	}
-	return clone
+	return testutil.NewLocalGitRepo(t, extraBranches...)
 }
 
+// gitRun delegates to testutil.GitRun.
 func gitRun(t *testing.T, name string, args ...string) {
-	t.Helper()
-	cmd := exec.Command(name, args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("running %v: %v\noutput: %s", append([]string{name}, args...), err, out)
-	}
+	testutil.GitRun(t, name, args...)
 }
 
 func registerProject(pm *project.Manager, id, repoRoot string) {
-	pm.RegisterForTest(id, id, "https://github.com/owner/"+id, repoRoot)
+	testutil.RegisterProject(pm, id, repoRoot)
 }
 
 // ── Manager unit tests ────────────────────────────────────────────────────────
