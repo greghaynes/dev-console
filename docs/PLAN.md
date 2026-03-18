@@ -561,7 +561,7 @@ file.
 **Acceptance:** `make test-race` passes; no duplicate `newLocalGitRepo` /
 `gitRun` implementations remain in any `_test.go` file.
 
-### Q.2 Go API Client for Handler Tests
+### Q.2 Go API Client for Handler Tests ✅
 
 Replace the verbose `httptest.NewRequest` / `httptest.NewRecorder` pattern in
 handler tests with a typed Go client that hides request construction and

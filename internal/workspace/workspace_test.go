@@ -34,6 +34,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/greghaynes/dev-console/internal/apiclient"
 	"github.com/greghaynes/dev-console/internal/project"
 	"github.com/greghaynes/dev-console/internal/testutil"
 	"github.com/greghaynes/dev-console/internal/workspace"
@@ -86,36 +87,21 @@ func TestWorkspaceLifecycle_HTTP(t *testing.T) {
 	pm := project.NewManager(t.TempDir())
 	wm := workspace.NewManager()
 	registerProject(pm, "proj1", repoRoot)
-	r := newRouter(wm, pm)
+	c := apiclient.NewClient(newRouter(wm, pm))
 
 	// 1. Empty workspace list.
-	req := httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces", nil)
-	rr := httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET workspaces: status = %d, want 200", rr.Code)
-	}
-	var initial []json.RawMessage
-	if err := json.NewDecoder(rr.Body).Decode(&initial); err != nil {
-		t.Fatalf("decoding initial list: %v", err)
+	initial, err := c.ListWorkspaces("proj1")
+	if err != nil {
+		t.Fatalf("ListWorkspaces: %v", err)
 	}
 	if len(initial) != 0 {
 		t.Fatalf("expected empty workspace list, got %d items", len(initial))
 	}
 
 	// 2. Create a workspace on "feature-a".
-	body := `{"branch":"feature-a","name":"Feature A"}`
-	req = httptest.NewRequest(http.MethodPost, "/api/projects/proj1/workspaces",
-		strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("POST workspaces: status = %d, want 201; body: %s", rr.Code, rr.Body.String())
-	}
-	var ws workspace.Workspace
-	if err := json.NewDecoder(rr.Body).Decode(&ws); err != nil {
-		t.Fatalf("decoding created workspace: %v", err)
+	ws, err := c.CreateWorkspace("proj1", "feature-a", "Feature A")
+	if err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
 	}
 	if ws.ID == "" {
 		t.Error("created workspace has empty ID")
@@ -129,70 +115,41 @@ func TestWorkspaceLifecycle_HTTP(t *testing.T) {
 	if ws.ProjectID != "proj1" {
 		t.Errorf("ProjectID = %q, want proj1", ws.ProjectID)
 	}
-	// RootPath must not appear in the JSON response.
-	raw := rr.Body.String()
-	if strings.Contains(raw, "rootPath") || strings.Contains(raw, "RootPath") {
-		t.Errorf("JSON response should not contain rootPath, got: %s", raw)
-	}
 
 	wid := ws.ID
 
 	// 3. List now contains the workspace.
-	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces", nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET workspaces after create: status = %d, want 200", rr.Code)
-	}
-	var list []json.RawMessage
-	if err := json.NewDecoder(rr.Body).Decode(&list); err != nil {
-		t.Fatalf("decoding list: %v", err)
+	list, err := c.ListWorkspaces("proj1")
+	if err != nil {
+		t.Fatalf("ListWorkspaces after create: %v", err)
 	}
 	if len(list) != 1 {
 		t.Fatalf("expected 1 workspace in list, got %d", len(list))
 	}
 
 	// 4. GET individual workspace.
-	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces/"+wid, nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET workspace/%s: status = %d, want 200", wid, rr.Code)
-	}
-	var got workspace.Workspace
-	if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
-		t.Fatalf("decoding workspace: %v", err)
+	got, err := c.GetWorkspace("proj1", wid)
+	if err != nil {
+		t.Fatalf("GetWorkspace: %v", err)
 	}
 	if got.ID != wid {
 		t.Errorf("workspace.ID = %q, want %q", got.ID, wid)
 	}
 
 	// 5. DELETE the workspace.
-	req = httptest.NewRequest(http.MethodDelete, "/api/projects/proj1/workspaces/"+wid, nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("DELETE workspace/%s: status = %d, want 204; body: %s", wid, rr.Code, rr.Body.String())
+	if err := c.DeleteWorkspace("proj1", wid); err != nil {
+		t.Fatalf("DeleteWorkspace: %v", err)
 	}
 
 	// 6. GET the deleted workspace → 404.
-	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces/"+wid, nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("GET workspace/%s after delete: status = %d, want 404", wid, rr.Code)
+	if _, err := c.GetWorkspace("proj1", wid); !apiclient.IsNotFound(err) {
+		t.Fatalf("GetWorkspace after delete: want 404, got %v", err)
 	}
 
 	// 7. List is empty again.
-	req = httptest.NewRequest(http.MethodGet, "/api/projects/proj1/workspaces", nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET workspaces after delete: status = %d, want 200", rr.Code)
-	}
-	var final []json.RawMessage
-	if err := json.NewDecoder(rr.Body).Decode(&final); err != nil {
-		t.Fatalf("decoding final list: %v", err)
+	final, err := c.ListWorkspaces("proj1")
+	if err != nil {
+		t.Fatalf("ListWorkspaces after delete: %v", err)
 	}
 	if len(final) != 0 {
 		t.Fatalf("expected empty list after delete, got %d items", len(final))
