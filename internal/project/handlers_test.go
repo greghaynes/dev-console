@@ -26,13 +26,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
 
 	"github.com/greghaynes/dev-console/internal/project"
+	"github.com/greghaynes/dev-console/internal/testutil"
 	"github.com/greghaynes/dev-console/internal/workspace"
 )
 
@@ -57,34 +57,15 @@ func newRouter(pm *project.Manager, wm *workspace.Manager) *mux.Router {
 	return r
 }
 
-// newLocalGitRepo initialises a bare source repository, clones it into a
-// subdirectory of tmp, commits an empty root commit, and pushes it.  Returns
-// the path to the clone (the "project root").
-//
-// This gives tests a fully-valid git repository they can use as a project
-// root without any network calls.
-func newLocalGitRepo(t *testing.T) (projectRoot string) {
-	t.Helper()
-	tmp := t.TempDir()
-	bare := tmp + "/source.git"
-	clone := tmp + "/project"
-
-	gitRun(t, "git", "init", "--bare", bare)
-	gitRun(t, "git", "clone", bare, clone)
-	gitRun(t, "git", "-C", clone, "config", "user.email", "test@test.com")
-	gitRun(t, "git", "-C", clone, "config", "user.name", "Test")
-	gitRun(t, "git", "-C", clone, "commit", "--allow-empty", "-m", "init")
-	gitRun(t, "git", "-C", clone, "push", "origin", "master")
-	return clone
+// newLocalGitRepo delegates to testutil.NewLocalGitRepo without extra branches,
+// preserving the call sites used in this package's tests.
+func newLocalGitRepo(t *testing.T) string {
+	return testutil.NewLocalGitRepo(t)
 }
 
-// gitRun runs a git command and fails the test on error.
+// gitRun delegates to testutil.GitRun.
 func gitRun(t *testing.T, name string, args ...string) {
-	t.Helper()
-	cmd := exec.Command(name, args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("running %v: %v\noutput: %s", append([]string{name}, args...), err, out)
-	}
+	testutil.GitRun(t, name, args...)
 }
 
 // decodeProject decodes a single Project from the response body.

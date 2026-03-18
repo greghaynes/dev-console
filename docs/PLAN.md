@@ -526,6 +526,132 @@ backend.
 
 ---
 
+## Code Quality & Maintainability
+
+This section tracks technical-debt and quality improvements that cut across
+multiple phases. Each item is independent of any single feature phase and can
+be worked on incrementally without blocking other work.
+
+### Q.1 Shared Test Utilities ✅
+
+Extract duplicated test helpers into `internal/testutil` so that the same
+fixtures and utilities are not copy-pasted across every package's `_test.go`
+file.
+
+**Duplicated symbols before this change:**
+
+| Symbol | Packages |
+|--------|----------|
+| `newLocalGitRepo` | `project`, `workspace`, `terminal` |
+| `gitRun` | `project`, `workspace`, `terminal` |
+| `registerProject` | `workspace`, `terminal` |
+
+**Deliverables:**
+
+- `internal/testutil/testutil.go` — exported helpers:
+  - `NewLocalGitRepo(t, extraBranches...)` — creates a bare repo, clones it,
+    pushes an initial commit, and optionally creates named branches
+  - `GitRun(t, name, args...)` — runs a git command, failing the test on error
+  - `RegisterProject(pm, id, repoRoot)` — injects a local clone into a project
+    `Manager` without network access
+- Each `_test.go` file that previously duplicated these helpers is updated to
+  delegate to the `testutil` package via thin local wrappers that preserve
+  existing call sites
+
+**Acceptance:** `make test-race` passes; no duplicate `newLocalGitRepo` /
+`gitRun` implementations remain in any `_test.go` file.
+
+### Q.2 Go API Client for Handler Tests
+
+Replace the verbose `httptest.NewRequest` / `httptest.NewRecorder` pattern in
+handler tests with a typed Go client that hides request construction and
+response decoding behind clear method names.
+
+**Problem:** Handler tests are dominated by boilerplate:
+
+```go
+req := httptest.NewRequest(http.MethodGet, "/api/projects", nil)
+rr := httptest.NewRecorder()
+r.ServeHTTP(rr, req)
+if rr.Code != http.StatusOK { ... }
+var projects []project.Project
+json.NewDecoder(rr.Body).Decode(&projects)
+```
+
+**Deliverables:**
+
+- `internal/apiclient/client.go` — a `Client` struct wrapping an
+  `http.Handler` (no real TCP connection required):
+  - `NewClient(handler)` — creates a client backed by the given handler
+  - `ListProjects() ([]project.Project, error)`
+  - `CreateProject(repoURL) (*project.Project, error)`
+  - `GetProject(pid) (*project.Project, error)`
+  - `DeleteProject(pid) error`
+  - `ListWorkspaces(pid) ([]workspace.Workspace, error)`
+  - `CreateWorkspace(pid, branch, name) (*workspace.Workspace, error)`
+  - `GetWorkspace(pid, wid) (*workspace.Workspace, error)`
+  - `DeleteWorkspace(pid, wid) error`
+  - `ListDirEntries(pid, wid, path) ([]workspace.DirEntry, error)`
+  - `GetFile(pid, wid, path) (string, error)`
+- Refactor the three lifecycle tests (`TestProjectLifecycle_CRUD`,
+  `TestWorkspaceLifecycle_HTTP`, `TestTerminalCreate_Returns201`) to use the
+  client; step-by-step assertions become one-liners
+
+**Acceptance:** Refactored tests are noticeably shorter; the intent of each
+step is clear without reading URL strings. `make test-race` passes.
+
+### Q.3 Handler Project/Workspace Resolution Helpers
+
+The "resolve project → 404 if missing" and "resolve workspace → 404 if
+missing" error-handling blocks are copy-pasted into every handler that needs
+them.
+
+```go
+// This block appears in every workspace and terminal handler:
+if _, err := pm.Get(pid); err != nil {
+    if errors.Is(err, project.ErrNotFound) {
+        http.Error(w, "project not found", http.StatusNotFound)
+        return
+    }
+    http.Error(w, "internal error", http.StatusInternalServerError)
+    return
+}
+```
+
+**Deliverables:**
+
+- `internal/httputil/httputil.go` — two helpers:
+  - `ResolveProject(w, pm, pid) (*project.Project, bool)` — writes the error
+    response and returns `(nil, false)` if the project is not found; returns
+    the project and `true` on success
+  - `ResolveWorkspace(w, wm, pm, pid, wid) (*workspace.Workspace, bool)` —
+    same pattern for workspace
+- Update `workspace/handlers.go` and `terminal/handlers.go` to use these
+  helpers
+
+**Acceptance:** No inline `errors.Is(err, project.ErrNotFound)` blocks remain
+in handler files; existing handler tests continue to pass.
+
+### Q.4 JSON Response Helper
+
+The `w.Header().Set("Content-Type", "application/json")` /
+`json.NewEncoder(w).Encode(v)` sequence is duplicated in every handler that
+returns a JSON body.
+
+**Deliverables:**
+
+- `internal/httputil/httputil.go` — add `WriteJSON(w, statusCode, v)` that
+  sets the `Content-Type` header, writes the given HTTP status code, and
+  encodes `v` as JSON; logs encoding errors rather than attempting a second
+  `http.Error` write after headers are already sent
+- Update all handlers to use `WriteJSON` instead of the inline encoding
+  sequence
+
+**Acceptance:** No bare `json.NewEncoder(w).Encode` calls remain in handler
+files; existing handler tests continue to pass.
+
+---
+
 ## Phase 3 — Basic Agent Chat
 
 **Goal:** Users can open a chat session with an AI assistant that can read files

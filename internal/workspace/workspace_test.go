@@ -28,7 +28,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,6 +35,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/greghaynes/dev-console/internal/project"
+	"github.com/greghaynes/dev-console/internal/testutil"
 	"github.com/greghaynes/dev-console/internal/workspace"
 )
 
@@ -49,42 +49,20 @@ func newRouter(wm *workspace.Manager, pm *project.Manager) *mux.Router {
 	return r
 }
 
-// newLocalGitRepo creates a temporary bare source repository, clones it into
-// a subdirectory, and pushes an initial empty commit.  It returns the path to
-// the clone.  Branch names in extraBranches are created from the initial
-// commit so they can be checked out as git worktrees.
+// newLocalGitRepo delegates to testutil.NewLocalGitRepo.
 func newLocalGitRepo(t *testing.T, extraBranches ...string) string {
-	t.Helper()
-	tmp := t.TempDir()
-	bare := tmp + "/source.git"
-	clone := tmp + "/project"
-
-	gitRun(t, "git", "init", "--bare", bare)
-	gitRun(t, "git", "clone", bare, clone)
-	gitRun(t, "git", "-C", clone, "config", "user.email", "test@test.com")
-	gitRun(t, "git", "-C", clone, "config", "user.name", "Test")
-	gitRun(t, "git", "-C", clone, "commit", "--allow-empty", "-m", "init")
-	gitRun(t, "git", "-C", clone, "push", "origin", "master")
-
-	for _, b := range extraBranches {
-		gitRun(t, "git", "-C", clone, "branch", b)
-	}
-	return clone
+	return testutil.NewLocalGitRepo(t, extraBranches...)
 }
 
-// gitRun runs a git command and fails the test on error.
+// gitRun delegates to testutil.GitRun.
 func gitRun(t *testing.T, name string, args ...string) {
-	t.Helper()
-	cmd := exec.Command(name, args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("running %v: %v\noutput: %s", append([]string{name}, args...), err, out)
-	}
+	testutil.GitRun(t, name, args...)
 }
 
 // registerProject adds a local git clone to the project Manager under id,
 // simulating a previously-cloned project.
 func registerProject(pm *project.Manager, id, repoRoot string) {
-	pm.RegisterForTest(id, id, "https://github.com/owner/"+id, repoRoot)
+	testutil.RegisterProject(pm, id, repoRoot)
 }
 
 // ── Functional tests (HTTP + git) ────────────────────────────────────────────
