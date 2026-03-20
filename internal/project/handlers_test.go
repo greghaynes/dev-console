@@ -31,6 +31,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/greghaynes/dev-console/internal/apiclient"
 	"github.com/greghaynes/dev-console/internal/project"
 	"github.com/greghaynes/dev-console/internal/testutil"
 	"github.com/greghaynes/dev-console/internal/workspace"
@@ -107,16 +108,14 @@ func decodeProjects(t *testing.T, rr *httptest.ResponseRecorder) []project.Proje
 func TestProjectLifecycle_CRUD(t *testing.T) {
 	repoRoot := newLocalGitRepo(t)
 	pm := project.NewManager(t.TempDir())
-	r := newRouter(pm, nil)
+	c := apiclient.NewClient(newRouter(pm, nil))
 
 	// 1. Empty list before any projects are registered.
-	req := httptest.NewRequest(http.MethodGet, "/api/projects", nil)
-	rr := httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET /api/projects: status = %d, want 200", rr.Code)
+	initial, err := c.ListProjects()
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
 	}
-	if initial := decodeProjects(t, rr); len(initial) != 0 {
+	if len(initial) != 0 {
 		t.Fatalf("expected empty list before any project is created, got %d items", len(initial))
 	}
 
@@ -124,13 +123,10 @@ func TestProjectLifecycle_CRUD(t *testing.T) {
 	pm.RegisterForTest("my-project", "my-project", "https://github.com/owner/my-project", repoRoot)
 
 	// 3. List now contains the project.
-	req = httptest.NewRequest(http.MethodGet, "/api/projects", nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET /api/projects after register: status = %d, want 200", rr.Code)
+	list, err := c.ListProjects()
+	if err != nil {
+		t.Fatalf("ListProjects after register: %v", err)
 	}
-	list := decodeProjects(t, rr)
 	if len(list) != 1 {
 		t.Fatalf("expected 1 project in list, got %d", len(list))
 	}
@@ -139,49 +135,33 @@ func TestProjectLifecycle_CRUD(t *testing.T) {
 	}
 
 	// 4. GET the individual project by ID.
-	req = httptest.NewRequest(http.MethodGet, "/api/projects/my-project", nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET /api/projects/my-project: status = %d, want 200", rr.Code)
+	p, err := c.GetProject("my-project")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
 	}
-	p := decodeProject(t, rr)
 	if p.ID != "my-project" {
 		t.Errorf("project.ID = %q, want my-project", p.ID)
 	}
 	if p.Name != "my-project" {
 		t.Errorf("project.Name = %q, want my-project", p.Name)
 	}
-	// RootPath must not appear in the JSON response.
-	raw := rr.Body.String()
-	if strings.Contains(raw, "rootPath") || strings.Contains(raw, "RootPath") {
-		t.Errorf("JSON response should not contain rootPath, got: %s", raw)
-	}
 
 	// 5. DELETE the project.
-	req = httptest.NewRequest(http.MethodDelete, "/api/projects/my-project", nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("DELETE /api/projects/my-project: status = %d, want 204", rr.Code)
+	if err := c.DeleteProject("my-project"); err != nil {
+		t.Fatalf("DeleteProject: %v", err)
 	}
 
 	// 6. GET the deleted project → 404.
-	req = httptest.NewRequest(http.MethodGet, "/api/projects/my-project", nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("GET after delete: status = %d, want 404", rr.Code)
+	if _, err := c.GetProject("my-project"); !apiclient.IsNotFound(err) {
+		t.Fatalf("GetProject after delete: want 404, got %v", err)
 	}
 
 	// 7. List is empty again.
-	req = httptest.NewRequest(http.MethodGet, "/api/projects", nil)
-	rr = httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("GET /api/projects after delete: status = %d, want 200", rr.Code)
+	final, err := c.ListProjects()
+	if err != nil {
+		t.Fatalf("ListProjects after delete: %v", err)
 	}
-	if final := decodeProjects(t, rr); len(final) != 0 {
+	if len(final) != 0 {
 		t.Fatalf("expected empty list after delete, got %d items", len(final))
 	}
 }

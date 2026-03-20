@@ -24,6 +24,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/greghaynes/dev-console/internal/apiclient"
 	"github.com/greghaynes/dev-console/internal/project"
 	"github.com/greghaynes/dev-console/internal/terminal"
 	"github.com/greghaynes/dev-console/internal/testutil"
@@ -121,38 +122,25 @@ func TestTerminalCreate_Returns201(t *testing.T) {
 	tm := terminal.NewManager()
 	registerProject(pm, "proj1", repoRoot)
 
+	c := apiclient.NewClient(newRouter(tm, wm, pm))
+
 	// Create a workspace first.
-	_, err := wm.Create("proj1", repoRoot, "feature-a", "Feature A", nil)
+	ws, err := c.CreateWorkspace("proj1", "feature-a", "Feature A")
 	if err != nil {
-		t.Fatalf("creating workspace: %v", err)
-	}
-	wsList := wm.List("proj1")
-	if len(wsList) == 0 {
-		t.Fatal("expected at least one workspace")
-	}
-	wid := wsList[0].ID
-
-	r := newRouter(tm, wm, pm)
-
-	req := httptest.NewRequest(http.MethodPost,
-		"/api/projects/proj1/workspaces/"+wid+"/terminals", nil)
-	rr := httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("POST terminals: status = %d, want 201; body: %s", rr.Code, rr.Body.String())
+		t.Fatalf("CreateWorkspace: %v", err)
 	}
 
-	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decoding response: %v", err)
+	// Create a terminal for the workspace.
+	tid, err := c.CreateTerminal("proj1", ws.ID)
+	if err != nil {
+		t.Fatalf("CreateTerminal: %v", err)
 	}
-	if resp["terminalId"] == "" {
+	if tid == "" {
 		t.Error("terminalId must not be empty in response")
 	}
 
 	// Clean up the session.
-	_ = tm.Delete("proj1", wid, resp["terminalId"])
+	_ = tm.Delete("proj1", ws.ID, tid)
 }
 
 // TestTerminalCreate_UnknownProject_Returns404 verifies a 404 for unknown project.
