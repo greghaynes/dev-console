@@ -32,6 +32,35 @@ const workspaces: Record<string, Array<{ id: string; projectId: string; name: st
 }
 
 // ---------------------------------------------------------------------------
+// Agent session state
+// ---------------------------------------------------------------------------
+
+interface AgentSession {
+  id: string
+  name: string
+  status: 'active' | 'idle'
+  createdAt: string
+}
+
+// Pre-seed one demo session per project workspace so the chat tab is usable
+// immediately without the user having to create a session first.
+const agentSessions: Record<string, AgentSession[]> = {
+  'demo-web/main': [
+    {
+      id: 'session-1',
+      name: 'Exploring the codebase',
+      status: 'idle',
+      createdAt: '2024-01-01T00:00:00Z',
+    },
+  ],
+  'demo-api/main': [],
+}
+
+function sessionKey(pid: string, wid: string) {
+  return `${pid}/${wid}`
+}
+
+// ---------------------------------------------------------------------------
 // Demo file system fixture
 // ---------------------------------------------------------------------------
 
@@ -97,6 +126,70 @@ function handleTerminalConnection({ client }: WebSocketHandlerConnection) {
 function terminalWsHandlers() {
   return (['ws', 'wss'] as const).map(proto =>
     ws.link(`${proto}://*${WS_TERMINAL_PATH}`).addEventListener('connection', handleTerminalConnection)
+  )
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket chat handler (covers both ws:// and wss://)
+// ---------------------------------------------------------------------------
+
+const WS_CHAT_PATH = '/api/projects/:pid/workspaces/:wid/sessions/:sid/chat'
+
+// Scripted demo reply that simulates a tool call followed by a streamed answer.
+const DEMO_TOOL_CALL = { tool: 'list_files', args: { path: '' } }
+const DEMO_TOOL_RESULT = 'README.md\npackage.json\nsrc/'
+const DEMO_REPLY_CHUNKS = [
+  "I can see the workspace contains several files. ",
+  "The `src/` directory has TypeScript source files ",
+  "including `main.ts`, `utils.ts`, and a `components/` subdirectory. ",
+  "There's also a `package.json` and a `README.md` at the root.\n\n",
+  "What would you like to explore or work on?",
+]
+
+function handleChatConnection({ client }: WebSocketHandlerConnection) {
+  client.addEventListener('message', event => {
+    if (typeof event.data !== 'string') return
+    let msg: { type?: string }
+    try { msg = JSON.parse(event.data) } catch { return }
+    if (msg.type !== 'user_message') return
+
+    let delay = 250
+
+    // Emit a tool_call frame
+    const toolCallDelay = delay
+    setTimeout(() => {
+      client.send(JSON.stringify({ type: 'tool_call', ...DEMO_TOOL_CALL }))
+    }, toolCallDelay)
+    delay += 350
+
+    // Emit a tool_result frame
+    const toolResultDelay = delay
+    setTimeout(() => {
+      client.send(JSON.stringify({ type: 'tool_result', tool: DEMO_TOOL_CALL.tool, content: DEMO_TOOL_RESULT }))
+    }, toolResultDelay)
+    delay += 200
+
+    // Stream assistant_chunk frames
+    for (const chunk of DEMO_REPLY_CHUNKS) {
+      const chunkDelay = delay
+      const captured = chunk
+      setTimeout(() => {
+        client.send(JSON.stringify({ type: 'assistant_chunk', content: captured }))
+      }, chunkDelay)
+      delay += 120
+    }
+
+    // Emit assistant_done
+    setTimeout(() => {
+      client.send(JSON.stringify({ type: 'assistant_done' }))
+    }, delay + 50)
+  })
+}
+
+/** Returns MSW WebSocket handlers for chat (both ws:// and wss://). */
+function chatWsHandlers() {
+  return (['ws', 'wss'] as const).map(proto =>
+    ws.link(`${proto}://*${WS_CHAT_PATH}`).addEventListener('connection', handleChatConnection)
   )
 }
 
@@ -201,6 +294,38 @@ export const handlers = [
     })
   }),
 
+  // Agent session handlers (Phase 3.2).
+  http.get('/api/projects/:pid/workspaces/:wid/sessions', ({ params }) => {
+    const { pid, wid } = params as { pid: string; wid: string }
+    return HttpResponse.json(agentSessions[sessionKey(pid, wid)] ?? [])
+  }),
+
+  http.post('/api/projects/:pid/workspaces/:wid/sessions', ({ params }) => {
+    const { pid, wid } = params as { pid: string; wid: string }
+    const id = `session-${Date.now()}`
+    const session: AgentSession = {
+      id,
+      name: 'New session',
+      status: 'idle',
+      createdAt: new Date().toISOString(),
+    }
+    const key = sessionKey(pid, wid)
+    if (!agentSessions[key]) agentSessions[key] = []
+    agentSessions[key].push(session)
+    return HttpResponse.json(session, { status: 201 })
+  }),
+
+  http.delete('/api/projects/:pid/workspaces/:wid/sessions/:sid', ({ params }) => {
+    const { pid, wid, sid } = params as { pid: string; wid: string; sid: string }
+    const key = sessionKey(pid, wid)
+    const list = agentSessions[key]
+    if (!list) return new HttpResponse(null, { status: 404 })
+    const idx = list.findIndex(s => s.id === sid)
+    if (idx === -1) return new HttpResponse(null, { status: 404 })
+    list.splice(idx, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.get('/api/github/repos', () => {
     return HttpResponse.json([
       {
@@ -239,4 +364,5 @@ export const handlers = [
   }),
 
   ...terminalWsHandlers(),
+  ...chatWsHandlers(),
 ]

@@ -1,16 +1,22 @@
 /**
- * WorkspacePage — split layout: collapsible file tree on the left, with a
- * tabbed panel on the right that switches between the file viewer and the
- * terminal.
+ * WorkspacePage — responsive workspace view.
+ *
+ * Desktop (≥ 768 px): collapsible file-tree sidebar on the left; tabbed panel
+ * on the right with four tabs: Agent, Files, Changes, Terminal.
+ *
+ * Mobile (< 768 px): full-screen single panel with a four-tab bottom nav bar
+ * (Agent, Files, Changes, Terminal) and a slide-in navigation drawer accessed
+ * via the ≡ icon in the top bar.
  *
  * Routes:
  *   /projects/:pid/workspaces/:wid
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import FileTree from '../components/FileTree'
 import FileViewer from '../components/FileViewer'
+import ChatPanel from '../components/ChatPanel'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -23,11 +29,17 @@ const C = {
   bg: '#0f172a',
   surface: '#1e293b',
   surfaceHover: '#263348',
+  surfaceAlt: '#162036',
   border: '#334155',
   text: '#f1f5f9',
   muted: '#94a3b8',
   blue: '#2563eb',
   blueLight: '#93c5fd',
+  green: '#22c55e',
+  greenDim: '#14532d',
+  red: '#ef4444',
+  redDim: '#450a0a',
+  amber: '#f59e0b',
 }
 
 // ---------------------------------------------------------------------------
@@ -88,8 +100,7 @@ function createDemoSocket(): SocketLike {
 }
 
 // ---------------------------------------------------------------------------
-// EmbeddedTerminal — xterm.js terminal panel (same logic as TerminalPage,
-// but rendered inline rather than as a full-page route).
+// EmbeddedTerminal — xterm.js terminal panel
 // ---------------------------------------------------------------------------
 
 function EmbeddedTerminal({ pid, wid, active }: { pid: string; wid: string; active: boolean }) {
@@ -195,9 +206,6 @@ function EmbeddedTerminal({ pid, wid, active }: { pid: string; wid: string; acti
       fitRef.current = null
       wsRef.current = null
     }
-    // `connect` and `handleResize` are defined inside this effect, so they
-    // capture fresh `pid`/`wid` values every time the effect re-runs; only
-    // the external deps need to be listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid, wid])
 
@@ -216,23 +224,496 @@ function EmbeddedTerminal({ pid, wid, active }: { pid: string; wid: string; acti
 }
 
 // ---------------------------------------------------------------------------
-// WorkspacePage
+// ChangesPanel — placeholder for Phase 4 (Change Proposal & Review)
 // ---------------------------------------------------------------------------
 
-type RightTab = 'terminal' | 'file'
+function ChangesPanel() {
+  const s: Record<string, React.CSSProperties> = {
+    panel: {
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      overflow: 'hidden',
+    },
+    empty: {
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '0.5rem',
+      color: C.muted,
+      fontSize: '0.875rem',
+      padding: '2rem',
+      textAlign: 'center',
+    },
+    icon: { fontSize: '2rem', opacity: 0.4 },
+    label: { fontWeight: 600, color: C.text },
+    sub: { color: C.muted, fontSize: '0.8125rem', lineHeight: 1.5, maxWidth: '20rem' },
+  }
+
+  return (
+    <div style={s.panel}>
+      <div style={s.empty}>
+        <div style={s.icon} aria-hidden="true">≈</div>
+        <div style={s.label}>No pending changes</div>
+        <div style={s.sub}>
+          When the agent proposes file changes you can review, accept, or reject
+          them here. This feature is coming in a future update.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// MobileNavDrawer — slide-in navigation drawer (mobile only)
+// ---------------------------------------------------------------------------
+
+interface WorkspaceInfo {
+  id: string
+  name: string
+  branch: string
+}
+
+function MobileNavDrawer({
+  pid,
+  currentWid,
+  onClose,
+}: {
+  pid: string
+  currentWid: string
+  onClose: () => void
+}) {
+  const navigate = useNavigate()
+  const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/projects/${pid}/workspaces`)
+      .then(r => r.ok ? r.json() as Promise<WorkspaceInfo[]> : Promise.reject(new Error()))
+      .then(data => { if (!cancelled) setWorkspaces(data) })
+      .catch(() => { /* ignore */ })
+    return () => { cancelled = true }
+  }, [pid])
+
+  function activateOnKeyboard(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      ;(e.currentTarget as HTMLElement).click()
+    }
+  }
+
+  const s: Record<string, React.CSSProperties> = {
+    backdrop: {
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.5)',
+      zIndex: 30,
+      display: 'flex',
+    },
+    drawer: {
+      width: '80%',
+      maxWidth: '18rem',
+      background: C.surface,
+      borderRight: `1px solid ${C.border}`,
+      display: 'flex',
+      flexDirection: 'column',
+      overflowY: 'auto',
+    },
+    drawerHeader: {
+      padding: '0.875rem 1rem',
+      borderBottom: `1px solid ${C.border}`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      flexShrink: 0,
+    },
+    drawerTitle: { fontWeight: 700, fontSize: '0.9375rem', color: C.text },
+    closeBtn: {
+      background: 'transparent',
+      border: 'none',
+      color: C.muted,
+      fontSize: '1.125rem',
+      cursor: 'pointer',
+      padding: '0.25rem',
+    },
+    section: { padding: '0.625rem 0.875rem' },
+    sectionLabel: {
+      fontSize: '0.6875rem',
+      color: C.muted,
+      letterSpacing: '0.08em',
+      fontWeight: 700,
+      textTransform: 'uppercase',
+      marginBottom: '0.375rem',
+    },
+    wsRow: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem',
+      padding: '0.5rem 0.625rem',
+      borderRadius: '0.375rem',
+      cursor: 'pointer',
+      fontSize: '0.875rem',
+      marginBottom: '0.125rem',
+    },
+    wsName: { fontWeight: 500, color: C.text },
+    wsBranch: { fontSize: '0.75rem', color: C.muted, fontFamily: 'monospace' },
+    divider: { borderColor: C.border, margin: '0.5rem 0' },
+    backBtn: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5rem',
+      padding: '0.5rem 0.625rem',
+      borderRadius: '0.375rem',
+      cursor: 'pointer',
+      fontSize: '0.875rem',
+      color: C.muted,
+      background: 'transparent',
+      border: 'none',
+      width: '100%',
+      textAlign: 'left',
+    },
+  }
+
+  return (
+    <div
+      style={s.backdrop}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Navigation drawer"
+    >
+      <div style={s.drawer} onClick={e => e.stopPropagation()}>
+        <div style={s.drawerHeader}>
+          <span style={s.drawerTitle}>{pid}</span>
+          <button style={s.closeBtn} onClick={onClose} aria-label="Close drawer">✕</button>
+        </div>
+
+        <div style={s.section}>
+          <div style={s.sectionLabel}>Workspaces</div>
+          {workspaces.map(ws => (
+            <div
+              key={ws.id}
+              style={{
+                ...s.wsRow,
+                background: ws.id === currentWid ? C.surfaceAlt : 'transparent',
+              }}
+              onClick={() => { navigate(`/projects/${pid}/workspaces/${ws.id}`); onClose() }}
+              onKeyDown={activateOnKeyboard}
+              role="button"
+              tabIndex={0}
+              aria-label={`Switch to workspace ${ws.name}`}
+              aria-current={ws.id === currentWid ? 'page' : undefined}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.0625rem' }}>
+                <span style={s.wsName}>{ws.name}</span>
+                <span style={s.wsBranch}>{ws.branch}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <hr style={s.divider} />
+
+        <div style={s.section}>
+          <button
+            style={s.backBtn}
+            onClick={() => { navigate(`/projects/${pid}/workspaces`); onClose() }}
+          >
+            ← All workspaces
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Tab type and tab definitions
+// ---------------------------------------------------------------------------
+
+type WorkspaceTab = 'agent' | 'files' | 'changes' | 'terminal'
+
+interface TabDef {
+  id: WorkspaceTab
+  icon: string
+  label: string
+}
+
+const TABS: TabDef[] = [
+  { id: 'agent',    icon: '💬', label: 'Agent' },
+  { id: 'files',    icon: '📁', label: 'Files' },
+  { id: 'changes',  icon: '≈',  label: 'Changes' },
+  { id: 'terminal', icon: '>_', label: 'Terminal' },
+]
+
+// ---------------------------------------------------------------------------
+// WorkspacePage
+// ---------------------------------------------------------------------------
 
 export default function WorkspacePage() {
   const { pid, wid } = useParams<{ pid: string; wid: string }>()
   const navigate = useNavigate()
 
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('agent')
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<RightTab>('terminal')
   const [treeOpen, setTreeOpen] = useState(true)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+
+  useLayoutEffect(() => {
+    function handle() { setIsMobile(window.innerWidth < 768) }
+    window.addEventListener('resize', handle)
+    return () => window.removeEventListener('resize', handle)
+  }, [])
 
   function handleFileSelect(path: string) {
     setSelectedFile(path)
-    setActiveTab('file')
+    setActiveTab('files')
   }
+
+  if (!pid || !wid) return null
+
+  // ---------------------------------------------------------------------------
+  // Shared panel content (rendered once, toggled with display to keep
+  // xterm.js and other stateful panels alive across tab switches)
+  // ---------------------------------------------------------------------------
+
+  function panelStyle(tab: WorkspaceTab): React.CSSProperties {
+    return {
+      display: activeTab === tab ? 'flex' : 'none',
+      flexDirection: 'column',
+      flex: 1,
+      overflow: 'hidden',
+    }
+  }
+
+  const panels = (
+    <>
+      {/* Agent panel */}
+      <div style={panelStyle('agent')}>
+        <ChatPanel pid={pid} wid={wid} />
+      </div>
+
+      {/* Files panel */}
+      <div style={panelStyle('files')}>
+        {isMobile ? (
+          // Mobile: tree → viewer drill-down within the Files panel
+          selectedFile ? (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0.375rem 0.75rem',
+                background: C.surface,
+                borderBottom: `1px solid ${C.border}`,
+                gap: '0.375rem',
+                flexShrink: 0,
+              }}>
+                <button
+                  style={{ background: 'transparent', border: 'none', color: C.blueLight, fontSize: '0.875rem', cursor: 'pointer', padding: 0 }}
+                  onClick={() => setSelectedFile(null)}
+                  aria-label="Back to file tree"
+                >
+                  ‹ Files
+                </button>
+                <span style={{ color: C.muted, fontSize: '0.8125rem' }}>/</span>
+                <span style={{ color: C.text, fontSize: '0.8125rem', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedFile}
+                </span>
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <FileViewer pid={pid} wid={wid} path={selectedFile} />
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+              <div style={{
+                padding: '0.375rem 0.75rem',
+                background: C.surface,
+                borderBottom: `1px solid ${C.border}`,
+                fontSize: '0.75rem',
+                color: C.muted,
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                flexShrink: 0,
+              }}>
+                FILES
+              </div>
+              <FileTree
+                pid={pid}
+                wid={wid}
+                onFileSelect={handleFileSelect}
+                selectedPath={selectedFile ?? undefined}
+              />
+            </div>
+          )
+        ) : (
+          // Desktop: file viewer (tree is in the left sidebar)
+          selectedFile ? (
+            <FileViewer pid={pid} wid={wid} path={selectedFile} />
+          ) : (
+            <div style={{ padding: '2rem', color: C.muted, fontSize: '0.875rem' }}>
+              Select a file from the tree to view its contents.
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Changes panel */}
+      <div style={panelStyle('changes')}>
+        <ChangesPanel />
+      </div>
+
+      {/* Terminal panel — always mounted to keep xterm alive */}
+      <div style={panelStyle('terminal')}>
+        <EmbeddedTerminal pid={pid} wid={wid} active={activeTab === 'terminal'} />
+      </div>
+    </>
+  )
+
+  // ---------------------------------------------------------------------------
+  // Mobile layout
+  // ---------------------------------------------------------------------------
+
+  if (isMobile) {
+    const s: Record<string, React.CSSProperties> = {
+      page: {
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        background: C.bg,
+        color: C.text,
+        overflow: 'hidden',
+      },
+      topBar: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 1rem',
+        height: '3rem',
+        background: C.surface,
+        borderBottom: `1px solid ${C.border}`,
+        flexShrink: 0,
+      },
+      topLeft: { display: 'flex', alignItems: 'center', gap: '0.5rem' },
+      backBtn: {
+        background: 'transparent',
+        border: 'none',
+        color: C.muted,
+        fontSize: '1.25rem',
+        cursor: 'pointer',
+        padding: '0.25rem',
+        lineHeight: 1,
+      },
+      title: { fontWeight: 600, fontSize: '0.9375rem', color: C.text },
+      topRight: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
+      widLabel: {
+        fontSize: '0.75rem',
+        color: C.muted,
+        maxWidth: '7rem',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      },
+      menuBtn: {
+        background: 'transparent',
+        border: 'none',
+        color: C.text,
+        fontSize: '1.25rem',
+        cursor: 'pointer',
+        padding: '0.25rem 0.375rem',
+        lineHeight: 1,
+      },
+      content: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+      bottomBar: {
+        display: 'flex',
+        borderTop: `1px solid ${C.border}`,
+        background: C.surface,
+        flexShrink: 0,
+      },
+    }
+
+    function mobileTabStyle(tab: WorkspaceTab): React.CSSProperties {
+      const active = activeTab === tab
+      return {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0.5rem 0 0.625rem',
+        background: 'transparent',
+        border: 'none',
+        borderTop: `2px solid ${active ? C.blue : 'transparent'}`,
+        cursor: 'pointer',
+        gap: '0.125rem',
+        color: active ? C.blueLight : C.muted,
+      }
+    }
+
+    return (
+      <div style={s.page}>
+        {/* Top bar */}
+        <header style={s.topBar}>
+          <div style={s.topLeft}>
+            <button
+              style={s.backBtn}
+              onClick={() => navigate(`/projects/${pid}/workspaces`)}
+              aria-label="Back to workspaces"
+            >
+              ‹
+            </button>
+            <span style={s.title}>{pid}</span>
+          </div>
+          <div style={s.topRight}>
+            <span style={s.widLabel}>{wid}</span>
+            <button
+              style={s.menuBtn}
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open navigation drawer"
+            >
+              ≡
+            </button>
+          </div>
+        </header>
+
+        {/* Panel content */}
+        <div style={s.content}>{panels}</div>
+
+        {/* Bottom tab bar */}
+        <nav style={s.bottomBar} aria-label="Workspace panels">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              style={mobileTabStyle(tab.id)}
+              onClick={() => setActiveTab(tab.id)}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-label={tab.label}
+            >
+              <span style={{ fontSize: '1.0625rem', lineHeight: 1 }} aria-hidden="true">{tab.icon}</span>
+              <span style={{ fontSize: '0.6875rem', letterSpacing: '0.01em' }}>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* Navigation drawer */}
+        {drawerOpen && (
+          <MobileNavDrawer
+            pid={pid}
+            currentWid={wid}
+            onClose={() => setDrawerOpen(false)}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Desktop layout
+  // ---------------------------------------------------------------------------
 
   const s: Record<string, React.CSSProperties> = {
     page: {
@@ -266,8 +747,8 @@ export default function WorkspacePage() {
       flex: 1,
       display: 'flex',
       overflow: 'hidden',
+      position: 'relative',
     },
-    // Left sidebar (file tree)
     sidebar: {
       width: treeOpen ? '220px' : '0',
       minWidth: treeOpen ? '220px' : '0',
@@ -308,13 +789,11 @@ export default function WorkspacePage() {
       lineHeight: 1,
       transition: 'left 0.15s',
     },
-    // Right panel
     right: {
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',
-      position: 'relative',
     },
     tabBar: {
       display: 'flex',
@@ -322,15 +801,10 @@ export default function WorkspacePage() {
       borderBottom: `1px solid ${C.border}`,
       flexShrink: 0,
     },
-    panelWrap: {
-      flex: 1,
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-    },
   }
 
-  function tabStyle(active: boolean): React.CSSProperties {
+  function desktopTabStyle(tab: WorkspaceTab): React.CSSProperties {
+    const active = activeTab === tab
     return {
       padding: '0.5rem 1rem',
       fontSize: '0.8125rem',
@@ -340,10 +814,11 @@ export default function WorkspacePage() {
       borderBottom: active ? `2px solid ${C.blue}` : '2px solid transparent',
       color: active ? C.text : C.muted,
       fontWeight: active ? 600 : 400,
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.375rem',
     }
   }
-
-  if (!pid || !wid) return null
 
   return (
     <div style={s.page}>
@@ -364,7 +839,7 @@ export default function WorkspacePage() {
       </header>
 
       {/* Body: sidebar + right panel */}
-      <div style={{ ...s.body, position: 'relative' }}>
+      <div style={s.body}>
         {/* Tree toggle button */}
         <button
           style={s.toggleBtn}
@@ -393,39 +868,29 @@ export default function WorkspacePage() {
 
         {/* Right panel */}
         <div style={s.right}>
-          <div style={s.tabBar}>
-            <button
-              style={tabStyle(activeTab === 'terminal')}
-              onClick={() => setActiveTab('terminal')}
-              aria-selected={activeTab === 'terminal'}
-            >
-              Terminal
-            </button>
-            <button
-              style={tabStyle(activeTab === 'file')}
-              onClick={() => setActiveTab('file')}
-              aria-selected={activeTab === 'file'}
-              disabled={!selectedFile}
-            >
-              {selectedFile ? selectedFile.split('/').pop() : 'File'}
-            </button>
+          {/* Tab bar */}
+          <div style={s.tabBar} role="tablist" aria-label="Workspace panels">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                style={desktopTabStyle(tab.id)}
+                onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+              >
+                <span aria-hidden="true">{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          <div style={{ ...s.panelWrap, display: activeTab === 'terminal' ? 'flex' : 'none' }}>
-            <EmbeddedTerminal pid={pid} wid={wid} active={activeTab === 'terminal'} />
-          </div>
-
-          <div style={{ ...s.panelWrap, display: activeTab === 'file' ? 'flex' : 'none' }}>
-            {selectedFile ? (
-              <FileViewer pid={pid} wid={wid} path={selectedFile} />
-            ) : (
-              <div style={{ padding: '2rem', color: C.muted, fontSize: '0.875rem' }}>
-                Select a file from the tree to view its contents.
-              </div>
-            )}
+          {/* Panel content */}
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {panels}
           </div>
         </div>
       </div>
     </div>
   )
 }
+
