@@ -239,7 +239,7 @@ export default function ChatPanel({ pid, wid }: ChatPanelProps) {
           // Attach result to the last tool message that has no result yet
           const idx = [...prev]
             .reverse()
-            .findIndex(m => m.role === 'tool' && !('result' in m && m.result !== undefined))
+            .findIndex(m => m.role === 'tool' && m.result === undefined)
           if (idx === -1) return prev
           const realIdx = prev.length - 1 - idx
           const updated = { ...(prev[realIdx] as Extract<Message, { role: 'tool' }>) }
