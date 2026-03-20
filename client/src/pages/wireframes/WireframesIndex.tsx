@@ -33,6 +33,12 @@ const VARIANTS = [
     title: 'Compact Table with Inline Expansion',
     desc: 'Data-dense table rows with a live search/filter input. Clicking a row expands it in-place to reveal its workspaces (accordion pattern). Best for power users with many projects.',
   },
+  {
+    path: '/wireframes/mobile-workspace',
+    label: 'Mobile Workspace',
+    title: 'Mobile Workspace — Tabbed Single-Panel',
+    desc: 'Full-featured workspace on a 390 px phone frame. Bottom tab bar switches between Agent chat, Files, Changes, and Terminal. Replaces the desktop split-pane with full-screen panels. Agent sessions are integrated into the workspace view; a slide-in drawer handles workspace and session navigation.',
+  },
 ]
 
 export default function WireframesIndex() {
@@ -83,12 +89,14 @@ export default function WireframesIndex() {
     <div style={s.page}>
       <header style={s.header}>Dev Console — Wireframes</header>
       <main style={s.content}>
-        <h1 style={s.heading}>Project Selection UI — Variants</h1>
+        <h1 style={s.heading}>Wireframe Variants</h1>
         <p style={s.sub}>
-          Three design variants for the project-selection screen (Screens 2, 2a,
-          and 2b from the wireframes doc). Each variant uses realistic mock data
-          and is interactive. Screenshots are taken at 1440 × 900 px (desktop)
-          and 375 × 812 px (mobile).
+          Interactive wireframes for Dev Console. The first three variants cover
+          the project-selection screen (Screens 2, 2a, and 2b). The fourth
+          variant is the mobile workspace mockup — a full-feature phone-frame
+          view with agent sessions, bottom tab navigation, and a slide-in
+          drawer. Screenshots are taken at 1440 × 900 px (desktop) and
+          375 × 812 px (mobile).
         </p>
         {VARIANTS.map(v => (
           <Link key={v.path} to={v.path} style={s.card}>

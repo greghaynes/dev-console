@@ -224,55 +224,278 @@ file tree | chat panel | terminal/detail panel.
 
 ---
 
-## Screen 4 — Main Console Layout (Mobile)
+## Screen 4 — Mobile Workspace — Tab Overview
 
-On narrow screens (< 768 px) the three-column layout collapses to a
-single-panel view with a bottom navigation bar.
+On narrow screens (< 768 px) the desktop three-column layout (file tree |
+chat | terminal) is replaced with a **full-screen single-panel view** driven
+by a four-tab bottom navigation bar. Each tab occupies the full screen; there
+is no split view. Agent sessions are surfaced as a first-class tab rather than
+a sidebar.
 
 ```text
 ┌──────────────────────────┐
-│ ‹  my-project     [@] ≡  │
+│ ‹ my-project  ● session  │  ← top bar: back, project name,
+│               [@]  ≡     │    active-session indicator, avatar, drawer
 ├──────────────────────────┤
 │                          │
-│  session-1               │
-│  ─────────────────────── │
+│   (active panel content  │
+│    — full height, scrolls│
+│    independently)        │
+│                          │
+│                          │
+│                          │
+│                          │
+│                          │
+│                          │
+│                          │
+├──────────────────────────┤
+│  💬      📁     ≈    >_  │  ← bottom tab bar
+│ Agent  Files Changes Term│
+└──────────────────────────┘
+```
+
+**Design rationale — why tabs instead of split view:**
+
+The desktop split layout places the file tree alongside the terminal in two
+columns. At 390 px this yields columns that are too narrow to read code or
+operate a terminal. A single-panel tabbed approach eliminates the split
+entirely: each tab delivers a full-width, fully scrollable view optimised for
+its content type.
+
+| Desktop panel          | Mobile equivalent                          |
+|------------------------|--------------------------------------------|
+| File tree (left col)   | **Files tab** — full-screen tree → viewer  |
+| Agent chat (center)    | **Agent tab** — full-screen chat panel     |
+| Pending diffs          | **Changes tab** — accept/reject list       |
+| Terminal (right col)   | **Terminal tab** — full-screen xterm.js    |
+
+---
+
+## Screen 4a — Mobile Workspace: Agent Tab
+
+Default tab. Shows the active agent session with the full conversation thread,
+including tool calls and proposed-change cards.
+
+```text
+┌──────────────────────────┐
+│ ‹ my-project  ● Refactor │
+│               [@]  ≡     │
+├──────────────────────────┤
+│ ● Refactor auth to JWT   │  ← session header strip
+│                 Agent    │    (status: active / idle)
+│                working…  │
+├──────────────────────────┤
+│                          │
+│  Refactor auth to JWT    │  ← user message (right-aligned bubble)
+│                    [You] │
 │                          │
 │  assistant               │
 │  ┌──────────────────────┐│
-│  │ Sure, I'll refactor  ││
+│  │ Sure, I'll refactor  ││  ← assistant bubble
 │  │ the auth module…     ││
 │  └──────────────────────┘│
 │                          │
 │  tool · read_file        │
-│  ┌──────────────────────┐│
+│  ┌──────────────────────┐│  ← tool-call card (monospace)
 │  │ path: src/auth.go    ││
 │  └──────────────────────┘│
 │                          │
-│  change_proposed 🔴      │
+│  change proposed 🔴      │
 │  ┌──────────────────────┐│
-│  │ auth.go              ││
-│  │ [Accept]  [Reject]   ││
+│  │ src/auth.go  pending ││  ← proposed-change card with
+│  │ [✓ Accept] [✕ Reject]││    inline Accept / Reject buttons
 │  └──────────────────────┘│
 │                          │
-│  You                     │
-│  ┌──────────────────────┐│
-│  │ Refactor auth to JWT ││
-│  └──────────────────────┘│
-│                          │
-│  ┌──────────────────────┐│
-│  │ Type a message…      ││
-│  │               [Send] ││
-│  └──────────────────────┘│
+│  ┌────────────────────┐↑ │
+│  │ Type a message…  ↑ │  │  ← fixed input bar at bottom
+│  └────────────────────┘  │
 ├──────────────────────────┤
-│  [💬 Chat] [📁 Files] [>_ Term] │
+│ 💬Agent 📁Files ≈Changes │
+│                   >_Term │
 └──────────────────────────┘
 ```
 
-**Layout notes:**
+**Interaction notes:**
 
-- Bottom nav bar switches between Chat, Files, and Terminal views.
-- The hamburger `≡` opens a slide-in drawer with project list, workspace list,
-  and session list.
+- The session-header strip shows the active session name and a typing indicator
+  ("Agent working…") when the agent is processing.
+- Tapping the session name or the `≡` drawer opens the session picker.
+- Proposed-change cards in the chat allow quick Accept/Reject inline; the full
+  diff is available in the **Changes** tab.
+
+---
+
+## Screen 4b — Mobile Workspace: Files Tab
+
+Two-level drill-down: file tree → full-screen file viewer. No split view.
+
+```text
+┌──────────────────────────┐   ┌──────────────────────────┐
+│ ‹ my-project  ● Refactor │   │ ‹ my-project  ● Refactor │
+│               [@]  ≡     │   │               [@]  ≡     │
+├──────────────────────────┤   ├──────────────────────────┤
+│ FILES          my-project │   │ ‹ Files / src/auth.go    │  ← breadcrumb
+├──────────────────────────┤   │                   [Edit] │
+│ ▾ src/                   │   ├──────────────────────────┤
+│     auth.go           🟡 │   │  1  package auth         │
+│     main.go              │   │  2                       │
+│ ▾ internal/              │   │  3  import (             │
+│     jwt.go            🟡 │   │  4      "net/http"       │
+│     util.go              │   │  5                       │
+│   go.mod                 │   │  6      jwt "github.com  │
+│   README.md              │   │  7          /golang-jwt" │
+│                          │   │  8  )                    │
+│                          │   │  9                       │
+│   (🟡 = pending change)  │   │ 10  func JWTAuth(r       │
+│                          │   │     *http.Request) bool {│
+│                          │   │ 11      token, err :=    │
+│                          │   │         jwt.Parse(…)     │
+│                          │   │ 12      return err == nil│
+│                          │   │ 13  }                    │
+├──────────────────────────┤   ├──────────────────────────┤
+│ 💬Agent 📁Files ≈Changes │   │ 💬Agent 📁Files ≈Changes │
+│                   >_Term │   │                   >_Term │
+└──────────────────────────┘   └──────────────────────────┘
+        File tree                      File viewer
+```
+
+**Interaction notes:**
+
+- Tapping a file navigates to the full-screen viewer (no side-by-side split).
+- The breadcrumb "‹ Files" returns to the tree.
+- Files with pending agent changes show an amber dot 🟡.
+- "Edit" switches to a plain `<textarea>` editor (v1; no language-server
+  features).
+
+---
+
+## Screen 4c — Mobile Workspace: Changes Tab
+
+Lists all pending proposed changes from agent sessions. Each card is
+expandable to show a unified diff inline. Accept/Reject actions are per-file.
+
+```text
+┌──────────────────────────┐
+│ ‹ my-project  ● Refactor │
+│               [@]  ≡     │
+├──────────────────────────┤
+│ PROPOSED CHANGES  2 pend │
+├──────────────────────────┤
+│ PENDING REVIEW           │
+│ ┌────────────────────── ┐│
+│ │ src/auth.go           ││
+│ │ Refactor auth to JWT  ││  ← session label
+│ │ +8  −6          [›]   ││  ← tap › to expand diff
+│ ├────────────────────── ┤│
+│ │ - func BasicAuth(…) { ││  (expanded unified diff)
+│ │ -     _, _, ok :=     ││
+│ │ +  func JWTAuth(…) {  ││
+│ │ +      token, err :=  ││
+│ ├────────────────────── ┤│
+│ │ [✓ Accept]  [✕ Reject]││
+│ └────────────────────── ┘│
+│ ┌────────────────────── ┐│
+│ │ internal/jwt.go       ││
+│ │ Refactor auth to JWT  ││
+│ │ +24  −0         [›]   ││
+│ │ [✓ Accept]  [✕ Reject]││
+│ └────────────────────── ┘│
+├──────────────────────────┤
+│ 💬Agent 📁Files ≈Changes │
+│                   >_Term │
+└──────────────────────────┘
+```
+
+**Interaction notes:**
+
+- Tapping a card header expands/collapses the inline unified diff.
+- "Accept" calls `POST …/changes/:cid/accept`; "Reject" calls
+  `POST …/changes/:cid/reject`.
+- After reviewing, accepted/rejected files move to a "Reviewed" section below.
+- The Changes tab badge (≈ with a counter) updates live as changes are
+  reviewed.
+
+---
+
+## Screen 4d — Mobile Workspace: Terminal Tab
+
+Full-screen terminal — no split. The bottom tab bar remains visible for quick
+context switching.
+
+```text
+┌──────────────────────────┐
+│ ‹ my-project  ● Refactor │
+│               [@]  ≡     │
+├──────────────────────────┤
+│ TERMINAL     bash        │
+├──────────────────────────┤
+│ alice@dev-console:       │
+│ ~/my-project$ go test    │
+│     ./...                │
+│ ok   …/auth     0.124s   │
+│ ok   …/internal 0.031s   │
+│ All tests passed.        │
+│                          │
+│ alice@dev-console:       │
+│ ~/my-project$ ▌          │  ← blinking cursor
+│                          │
+│                          │
+│                          │
+│                          │
+│                          │
+│                          │
+├──────────────────────────┤
+│ 💬Agent 📁Files ≈Changes │
+│                   >_Term │
+└──────────────────────────┘
+```
+
+**Interaction notes:**
+
+- Full-width xterm.js terminal, no adjacent panels.
+- The tab bar does **not** overlap the terminal viewport; xterm.js resize
+  events are fired whenever the tab becomes active (`active` prop pattern
+  already used in `WorkspacePage`).
+- Mobile keyboard pushes the tab bar up; the terminal viewport shrinks
+  accordingly (`height: 100%` within the flex container).
+
+---
+
+## Screen 4e — Mobile Workspace: Navigation Drawer
+
+Opened by the `≡` icon. Slides in from the left. Provides workspace switching
+and agent-session management without leaving the current panel.
+
+```text
+┌────────────────┬─────────┐
+│ my-project  ✕  │ (dim    │
+├────────────────┤  back-  │
+│ WORKSPACE      │  drop)  │
+│  ⎇ main        │         │
+│    main        │         │
+│  ⎇ feature-auth│         │
+│    feature/auth│         │
+│                │         │
+├────────────────┤         │
+│ AGENT SESSIONS │         │
+│  ● Refactor…   │         │  ← active (highlighted)
+│    (active)    │         │
+│  ○ Add unit…   │         │
+│    (idle)      │         │
+│  ○ Fix CI…     │         │
+│    (idle)      │         │
+│                │         │
+│  + New session │         │
+│                │         │
+└────────────────┴─────────┘
+```
+
+**Interaction notes:**
+
+- Tapping a workspace row navigates to that workspace (preserves tab).
+- Tapping a session row switches the active session in the Agent tab.
+- "+ New session" calls `POST /api/projects/:pid/workspaces/:wid/sessions`.
+- Tapping the dimmed backdrop closes the drawer.
 
 ---
 

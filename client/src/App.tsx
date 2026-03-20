@@ -9,6 +9,7 @@ import WireframesIndex from './pages/wireframes/WireframesIndex'
 import VariantA from './pages/wireframes/VariantA'
 import VariantB from './pages/wireframes/VariantB'
 import VariantC from './pages/wireframes/VariantC'
+import MobileWorkspace from './pages/wireframes/MobileWorkspace'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true'
@@ -84,6 +85,7 @@ export default function App() {
           <Route path="/wireframes/variant-a" element={<VariantA />} />
           <Route path="/wireframes/variant-b" element={<VariantB />} />
           <Route path="/wireframes/variant-c" element={<VariantC />} />
+          <Route path="/wireframes/mobile-workspace" element={<MobileWorkspace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
