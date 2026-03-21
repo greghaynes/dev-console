@@ -17,8 +17,10 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/greghaynes/dev-console/internal/agent"
 	"github.com/greghaynes/dev-console/internal/auth"
 	"github.com/greghaynes/dev-console/internal/config"
+	"github.com/greghaynes/dev-console/internal/llm"
 	"github.com/greghaynes/dev-console/internal/project"
 	"github.com/greghaynes/dev-console/internal/spa"
 	"github.com/greghaynes/dev-console/internal/terminal"
@@ -126,6 +128,11 @@ func buildRouter(cfg *config.Config) *mux.Router {
 	})
 	workspace.RegisterRoutes(api, wm, pm)
 	terminal.RegisterRoutes(api, tm, wm, pm)
+
+	// Agent chat sessions (Phase 3).
+	llmClient := llm.New(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.Model)
+	am := agent.NewManager(llmClient, wm)
+	agent.RegisterRoutes(api, am, wm, pm)
 
 	// Serve the embedded SPA for all other routes (Phase 1.9).
 	// This must be registered last so that the more specific routes above

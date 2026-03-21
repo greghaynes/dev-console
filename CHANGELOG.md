@@ -8,6 +8,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Phase 3.1: LLM Client
+
+- `internal/llm/` package with a streaming OpenAI-compatible Chat Completions
+  client (`Client`, `Message`, `ChatRequest`, `ChatResponse`).
+- `Config.LLM.BaseURL` field added to `internal/config/config.go` and the
+  example YAML so operators can point to OpenAI, an Anthropic-compatible
+  endpoint, or Ollama.
+- Unit tests in `internal/llm/client_test.go` that spin up an in-process HTTP
+  stub server and verify streamed `data: {...}` chunks are decoded and returned
+  correctly.
+
+### Added — Phase 3.2: Agent Session Backend
+
+- `internal/agent/` package:
+  - `Session` — holds conversation history, cancel function, and running status.
+  - `Manager` — thread-safe CRUD for sessions scoped to a workspace.
+- REST endpoints registered under `/api/projects/:pid/workspaces/:wid/sessions`:
+  - `POST` — creates a new session; returns `{ id, projectId, workspaceId, createdAt }`.
+  - `GET` — lists all sessions for the workspace.
+  - `DELETE /:sid` — deletes a session.
+  - `GET /:sid/messages` — returns the conversation history.
+- WebSocket `WS /api/projects/:pid/workspaces/:wid/sessions/:sid/chat`:
+  - Accepts `{ "type": "user_message", "content": "..." }` frames.
+  - Streams `assistant_chunk`, `tool_call`, `tool_result`, and `assistant_done`
+    frames; `error` on failure.
+  - Supports `{ "type": "cancel" }` frame to abort an in-flight turn.
+  - Read-only tools available in this phase: `list_files`, `read_file`.
+- Example config updated (`docs/examples/dev-console.yaml.example`).
+
+### Added — Phase 3.3: Chat UI
+
+- `client/src/components/ChatPanel.tsx` — real-time streaming chat; markdown
+  rendering via `react-markdown`; collapsible tool-use blocks showing
+  `tool_call` / `tool_result` pairs; Cancel button; connection-status indicator.
+- `client/src/pages/WorkspacePage.tsx` — Chat tab added alongside Terminal and
+  File; creates a session on first open and passes the session ID to `ChatPanel`.
+- `client/src/mocks/handlers.ts` (demo mode) — added MSW WebSocket handler for
+  the chat endpoint that simulates a streaming agent turn, including a
+  `list_files` tool call followed by a word-by-word assistant reply; fixed MSW
+  WebSocket URL patterns to use `*${path}` prefix so that `path-to-regexp` can
+  match any origin without URL-encoding the wildcard.
+
 ### Added — Phase 2.1: File API
 
 - `GET /api/projects/:pid/workspaces/:wid/files?path=<dir>` — returns a JSON

@@ -39,6 +39,10 @@ auth:
 llm:
   # LLM provider: "openai", "anthropic" (OpenAI-compatible endpoint), or "ollama".
   provider:    "openai"
+  # Optional base URL override.  Leave unset to use the OpenAI default
+  # (https://api.openai.com/v1).  Set to your Anthropic or Ollama endpoint
+  # when using an OpenAI-compatible provider.
+  # baseUrl: "http://localhost:11434/v1"
   apiKey:      "${OPENAI_API_KEY}"
   model:       "gpt-4o"
 

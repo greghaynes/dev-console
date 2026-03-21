@@ -1,7 +1,7 @@
 /**
  * WorkspacePage — split layout: collapsible file tree on the left, with a
- * tabbed panel on the right that switches between the file viewer and the
- * terminal.
+ * tabbed panel on the right that switches between the file viewer, terminal,
+ * and AI chat.
  *
  * Routes:
  *   /projects/:pid/workspaces/:wid
@@ -11,6 +11,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import FileTree from '../components/FileTree'
 import FileViewer from '../components/FileViewer'
+import ChatPanel from '../components/ChatPanel'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -219,7 +220,7 @@ function EmbeddedTerminal({ pid, wid, active }: { pid: string; wid: string; acti
 // WorkspacePage
 // ---------------------------------------------------------------------------
 
-type RightTab = 'terminal' | 'file'
+type RightTab = 'terminal' | 'file' | 'chat'
 
 export default function WorkspacePage() {
   const { pid, wid } = useParams<{ pid: string; wid: string }>()
@@ -228,10 +229,27 @@ export default function WorkspacePage() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<RightTab>('terminal')
   const [treeOpen, setTreeOpen] = useState(true)
+  // Agent session ID — created lazily when the user first opens the Chat tab.
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionError, setSessionError] = useState<string | null>(null)
 
   function handleFileSelect(path: string) {
     setSelectedFile(path)
     setActiveTab('file')
+  }
+
+  // Create an agent session the first time the Chat tab is activated.
+  async function handleChatTab() {
+    setActiveTab('chat')
+    if (sessionId) return
+    try {
+      const res = await fetch(`/api/projects/${pid}/workspaces/${wid}/sessions`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = (await res.json()) as { id: string }
+      setSessionId(data.id)
+    } catch (err) {
+      setSessionError(String(err))
+    }
   }
 
   const s: Record<string, React.CSSProperties> = {
@@ -409,6 +427,13 @@ export default function WorkspacePage() {
             >
               {selectedFile ? selectedFile.split('/').pop() : 'File'}
             </button>
+            <button
+              style={tabStyle(activeTab === 'chat')}
+              onClick={handleChatTab}
+              aria-selected={activeTab === 'chat'}
+            >
+              Chat
+            </button>
           </div>
 
           <div style={{ ...s.panelWrap, display: activeTab === 'terminal' ? 'flex' : 'none' }}>
@@ -421,6 +446,20 @@ export default function WorkspacePage() {
             ) : (
               <div style={{ padding: '2rem', color: C.muted, fontSize: '0.875rem' }}>
                 Select a file from the tree to view its contents.
+              </div>
+            )}
+          </div>
+
+          <div style={{ ...s.panelWrap, display: activeTab === 'chat' ? 'flex' : 'none' }}>
+            {sessionError ? (
+              <div style={{ padding: '2rem', color: '#f87171', fontSize: '0.875rem' }}>
+                Failed to create chat session: {sessionError}
+              </div>
+            ) : sessionId ? (
+              <ChatPanel pid={pid} wid={wid} sid={sessionId} />
+            ) : (
+              <div style={{ padding: '2rem', color: C.muted, fontSize: '0.875rem' }}>
+                Starting chat session…
               </div>
             )}
           </div>
